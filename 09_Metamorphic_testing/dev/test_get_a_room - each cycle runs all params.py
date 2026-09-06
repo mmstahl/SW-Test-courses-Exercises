@@ -1,0 +1,212 @@
+#!/usr/bin/env python3
+import random
+import subprocess
+import sys
+from datetime import datetime, timedelta
+
+SCRIPT_NAME = "get_a_room.py"
+START_BOUND = datetime(2026, 10, 1)
+END_BOUND = datetime(2028, 9, 30)
+MAX_ATTEMPTS = 100
+
+def run_search(check_in, check_out, single, double, suite):
+    """
+    Executes get_a_room.py via CLI subprocess and returns the integer result.
+    """
+    cmd = [
+        sys.executable,
+        SCRIPT_NAME,
+        check_in.strftime("%d/%m/%Y"),
+        check_out.strftime("%d/%m/%Y"),
+        "--single", str(single),
+        "--double", str(double),
+        "--suite", str(suite)
+    ]
+
+
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        
+        # Parse output string "Number of hotels that meet your needs: X"
+        for line in result.stdout.strip().split("\n"):
+            if "Number of hotels that meet your needs:" in line:
+                return int(line.split(":")[-1].strip())
+                
+        raise ValueError(f"Could not parse count from CLI output: {result.stdout}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"\nCLI Execution Error: {e.stderr}")
+        sys.exit(1)
+
+def print_test_params(label, check_in, check_out, s, d, st, result):
+    """Helper function to print formatted test parameters and output."""
+    print(f"  [{label}] Dates: {check_in.strftime('%d/%m/%Y')} -> {check_out.strftime('%d/%m/%Y')} | "
+          f"Rooms: (S:{s}, D:{d}, St:{st}) | Result: {result}")
+
+def main():
+    max_days_offset = (END_BOUND - START_BOUND).days
+
+    # Storage for captured bugs and execution counts
+    found_bugs = {}  # Keys: 'date', 'single', 'double', 'suite'
+    attempts = {
+        'date': 0,
+        'single': 0,
+        'double': 0,
+        'suite': 0
+    }
+
+    def can_continue():
+        # Stop if all 4 bug types found
+        if len(found_bugs) == 4:
+            return False
+        # Stop if all unfound bug types have exhausted 100 attempts
+        for bug_type in ['date', 'single', 'double', 'suite']:
+            if bug_type not in found_bugs and attempts[bug_type] < MAX_ATTEMPTS:
+                return True
+        return False
+
+    print("Starting automated test execution...\n")
+
+    while can_continue():
+        # ======================================================================
+        # STEPS 1 - 3: Baseline Search Selection
+        # ======================================================================
+        while True:
+            random_start_offset = random.randint(0, max_days_offset - 30)
+            check_in_base = START_BOUND + timedelta(days=random_start_offset)
+            stay_duration = random.randint(1, 30)
+            check_out_base = check_in_base + timedelta(days=stay_duration)
+
+            s_base = random.randint(0, 10)
+            d_base = random.randint(0, 10)
+            st_base = random.randint(0, 10)
+
+            res_step3 = run_search(check_in_base, check_out_base, s_base, d_base, st_base)
+            
+            if res_step3 >= 10:
+                break
+
+        # ======================================================================
+        # STEPS 4 - 7: Increment Check-Out Date Loop
+        # ======================================================================
+        if 'date' not in found_bugs and attempts['date'] < MAX_ATTEMPTS:
+            attempts['date'] += 1
+            print(f"\rRunning day-expansion tests. Cycle: {attempts['date']}", end="", flush=True)
+
+            current_check_out = check_out_base
+            prev_check_out = check_out_base
+            previous_res = res_step3
+
+            while True:
+                current_check_out += timedelta(days=1)
+                res_current = run_search(check_in_base, current_check_out, s_base, d_base, st_base)
+
+                if res_current == 0 or current_check_out >= END_BOUND:
+                    break
+
+                if res_current <= previous_res:
+                    previous_res = res_current
+                    prev_check_out = current_check_out
+                    continue
+                else:
+                    # Bug Found
+                    found_bugs['date'] = {
+                        'baseline': (check_in_base, check_out_base, s_base, d_base, st_base, res_step3),
+                        'one_before': (check_in_base, prev_check_out, s_base, d_base, st_base, previous_res),
+                        'failing': (check_in_base, current_check_out, s_base, d_base, st_base, res_current)
+                    }
+                    print("\nFound a day-expansion bug")
+                    break
+
+            if 'date' not in found_bugs and attempts['date'] == MAX_ATTEMPTS:
+                print(f"\nNo bugs in {MAX_ATTEMPTS} test cycles of day expansion")
+
+        # ======================================================================
+        # STEPS 8 - 10: Room Expansion Escalation Tests
+        # ======================================================================
+        def run_escalation_test(room_type):
+            attempts[room_type] += 1
+            print(f"\rRunning {room_type}-expansion tests. Cycle: {attempts[room_type]}", end="", flush=True)
+
+            curr_s, curr_d, curr_st = s_base, d_base, st_base
+            prev_s, prev_d, prev_st = s_base, d_base, st_base
+            prev_res = res_step3
+
+            while True:
+                if room_type == "single":
+                    curr_s += 1
+                    target_val = curr_s
+                elif room_type == "double":
+                    curr_d += 1
+                    target_val = curr_d
+                elif room_type == "suite":
+                    curr_st += 1
+                    target_val = curr_st
+
+                if target_val > 30:
+                    break
+
+                res_curr = run_search(check_in_base, check_out_base, curr_s, curr_d, curr_st)
+
+                if res_curr == 0:
+                    break
+
+                if res_curr <= prev_res:
+                    prev_res = res_curr
+                    prev_s, prev_d, prev_st = curr_s, curr_d, curr_st
+                    continue
+                else:
+                    # Bug Found
+                    found_bugs[room_type] = {
+                        'baseline': (check_in_base, check_out_base, s_base, d_base, st_base, res_step3),
+                        'one_before': (check_in_base, check_out_base, prev_s, prev_d, prev_st, prev_res),
+                        'failing': (check_in_base, check_out_base, curr_s, curr_d, curr_st, res_curr)
+                    }
+                    print(f"\nFound a {room_type}-expansion bug")
+                    break
+
+            if room_type not in found_bugs and attempts[room_type] == MAX_ATTEMPTS:
+                print(f"\nNo bugs in {MAX_ATTEMPTS} test cycles of {room_type} expansion")
+
+        # Step 8: Single Rooms
+        if 'single' not in found_bugs and attempts['single'] < MAX_ATTEMPTS:
+            run_escalation_test("single")
+
+        # Step 9: Double Rooms
+        if 'double' not in found_bugs and attempts['double'] < MAX_ATTEMPTS:
+            run_escalation_test("double")
+
+        # Step 10: Suite Rooms
+        if 'suite' not in found_bugs and attempts['suite'] < MAX_ATTEMPTS:
+            run_escalation_test("suite")
+
+    # ==========================================================================
+    # FINAL RESULTS SUMMARY
+    # ==========================================================================
+    print("\n\n" + "=" * 60)
+    print("TEST SUITE EXECUTION SUMMARY")
+    print("=" * 60)
+    print(f"Total BUGS Found: {len(found_bugs)} / 4")
+    for category in ['date', 'single', 'double', 'suite']:
+        print(f"  - {category.capitalize()} Escalation Attempts: {attempts[category]}/{MAX_ATTEMPTS}")
+
+    if found_bugs:
+        print("\n" + "!" * 40)
+        print("DISCOVERED BUG DETAILS")
+        print("!" * 40)
+
+        for bug_type, bug_data in found_bugs.items():
+            print(f"\n--- BUG TYPE: {bug_type.upper()} EXPANSION ---")
+            print_test_params("Baseline Test (Step 3)", *bug_data['baseline'])
+            print_test_params("One-Before-Failing Test", *bug_data['one_before'])
+            print_test_params("Failing Test", *bug_data['failing'])
+
+    print("\nExecution complete.")
+
+if __name__ == "__main__":
+    main()

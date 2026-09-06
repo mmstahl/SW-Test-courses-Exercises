@@ -1,0 +1,72 @@
+Model	Storage	Color	Network	Accessory
+Pixel 9	1TB	Red	4G	Charger
+Pixel 9 Pro XL	512GB	Black	5G	Earbuds
+Pixel 9 Pro	512GB	Blue	4G	None
+Pixel 9	128GB	Black	5G	None
+Pixel 9 Pro XL	1TB	Silver	5G	Charger
+Pixel 9 Pro XL	1TB	Black	4G	None
+Pixel 9 Pro	128GB	Black	4G	Case
+Pixel 9 Pro	256GB	Blue	5G	Charger
+Pixel 9 Pro XL	512GB	Silver	4G	Case
+Pixel 9	256GB	Blue	4G	Earbuds
+Pixel 9	256GB	Black	5G	Case
+Pixel 9 Pro	128GB	Silver	5G	Case
+Pixel 9 Pro	1TB	Black	5G	Case
+Pixel 9 Pro XL	128GB	Blue	5G	Case
+Pixel 9 Pro XL	512GB	Blue	4G	Charger
+Pixel 9	512GB	Silver	5G	Charger
+Pixel 9 Pro	1TB	Black	4G	Charger
+Pixel 9	128GB	Silver	4G	Charger
+Pixel 9 Pro XL	256GB	Red	4G	Charger
+Pixel 9 Pro	256GB	Silver	5G	Earbuds
+Pixel 9 Pro	512GB	Red	5G	None
+Pixel 9 Pro	256GB	Black	4G	None
+Pixel 9 Pro XL	256GB	Black	5G	Charger
+Pixel 9	256GB	Red	5G	Earbuds
+Pixel 9	512GB	Black	4G	Charger
+Pixel 9 Pro XL	128GB	Red	4G	None
+Pixel 9 Pro	1TB	Silver	4G	Earbuds
+Pixel 9 Pro XL	256GB	Silver	5G	None
+Pixel 9 Pro XL	512GB	Silver	4G	Earbuds
+Pixel 9	128GB	Silver	4G	Earbuds
+Pixel 9	1TB	Blue	5G	Charger
+Pixel 9	1TB	Silver	4G	None
+Pixel 9	512GB	Blue	5G	Case
+Pixel 9 Pro XL	128GB	Black	4G	Earbuds
+Pixel 9 Pro	128GB	Black	5G	Charger
+Pixel 9	256GB	Red	5G	None
+Pixel 9	128GB	Blue	4G	None
+Pixel 9 Pro	128GB	Silver	5G	None
+Pixel 9 Pro XL	256GB	Blue	4G	Case
+Pixel 9 Pro XL	1TB	Blue	5G	Earbuds
+Pixel 9 Pro	512GB	Red	4G	Earbuds
+Pixel 9 Pro XL	512GB	Silver	4G	None
+Pixel 9 Pro	512GB	Black	4G	Case
+Pixel 9	256GB	Silver	4G	Case
+Pixel 9 Pro	512GB	Red	5G	Charger
+Pixel 9 Pro XL	1TB	Red	5G	None
+Pixel 9 Pro	256GB	Silver	5G	Charger
+Pixel 9 Pro	1TB	Red	4G	Earbuds
+Pixel 9	512GB	Red	5G	Case
+Pixel 9 Pro	128GB	Blue	4G	Charger
+Pixel 9 Pro	256GB	Red	4G	Case
+Pixel 9	128GB	Red	5G	Charger
+Pixel 9 Pro	1TB	Blue	5G	None
+Pixel 9	256GB	Black	4G	Earbuds
+Pixel 9 Pro XL	1TB	Red	4G	Case
+Pixel 9 Pro	128GB	Blue	5G	Earbuds
+Pixel 9 Pro	1TB	Blue	4G	Case
+Pixel 9 Pro XL	128GB	Silver	5G	Charger
+Pixel 9	512GB	Blue	5G	Earbuds
+Pixel 9	512GB	Black	5G	None
+Pixel 9 Pro	128GB	Red	4G	Earbuds
+Pixel 9	1TB	Silver	5G	Case
+Pixel 9	1TB	Black	5G	Earbuds
+Pixel 9 Pro XL	256GB	Blue	4G	None
+Pixel 9 Pro XL	256GB	Red	5G	Earbuds
+Pixel 9 Pro XL	256GB	Black	5G	Case
+Pixel 9	128GB	Red	5G	Case
+Pixel 9 Pro	512GB	Silver	5G	None
+Pixel 9	256GB	Red	4G	Charger
+Pixel 9 Pro	512GB	Black	4G	Earbuds
+Pixel 9 Pro XL	512GB	Red	5G	Earbuds

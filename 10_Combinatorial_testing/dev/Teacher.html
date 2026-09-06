@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f6f9; color: #333; }
+    .card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 900px; margin: auto; margin-bottom: 20px; }
+    h2 { color: #003366; margin-top: 0; }
+    h3 { color: #003366; }
+    label { font-weight: bold; }
+    select, input { padding: 10px; margin: 10px 0; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; }
+    .btn-group { display: flex; gap: 10px; margin-top: 10px; }
+    .btn { background: #003366; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; flex: 1; }
+    .btn-stop { background: #c0392b; }
+    .btn-next { background: #27ae60; }
+    .btn-addtime { background: #2980b9; }
+    .btn-reset { background: #7f8c8d; max-width: 220px; }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { background: #b0b8c1; cursor: not-allowed; opacity: 0.7; }
+    .status-box { background: #eef2f5; padding: 15px; border-radius: 5px; margin-top: 20px; border-left: 5px solid #003366; }
+    .timer { font-size: 24px; font-weight: bold; color: #d9534f; margin-top: 10px; }
+    .counter-badge { font-size: 18px; font-weight: bold; color: #27ae60; margin-top: 5px; }
+    .leaderboard-columns { display: flex; gap: 20px; flex-wrap: wrap; }
+    .leaderboard-columns > div { flex: 1; min-width: 260px; }
+    table.grid-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    table.grid-table th, table.grid-table td { border: 1px solid #ccc; padding: 6px 10px; text-align: center; font-size: 14px; }
+    table.grid-table th { background: #003366; color: white; }
+    table.grid-table td.rank-1 { font-weight: bold; color: #b8860b; }
+    .histogram { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    .hist-row { display: flex; align-items: center; gap: 8px; }
+    .hist-label { width: 90px; font-size: 13px; text-align: right; flex-shrink: 0; }
+    .hist-bar-track { flex: 1; background: #eef2f5; border-radius: 3px; overflow: hidden; }
+    .hist-bar { background: #003366; color: white; font-size: 12px; padding: 4px 6px; box-sizing: border-box; min-width: 22px; text-align: right; border-radius: 3px; }
+    .masked-note { text-align: center; color: #888; font-style: italic; padding: 20px; }
+    .hidden { display: none; }
+    .question-image { max-width: 100%; border-radius: 8px; margin-top: 10px; }
+    .correct-answer-box { background: #eef7ee; border: 1px solid #c3e6cb; border-radius: 5px; padding: 12px; margin-top: 10px; font-size: 14px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <h2>Teacher Dashboard</h2>
+
+  <label for="q-select">Select Question to Launch:</label>
+  <select id="q-select" onchange="onQuestionSelect()">
+    <option value="">-- Loading questions... --</option>
+  </select>
+
+  <label for="duration">Set Duration (Seconds):</label>
+  <input type="number" id="duration" value="60" min="5" />
+
+  <div class="btn-group">
+    <button class="btn" onclick="startQuestion()">🚀 Start Question</button>
+    <button class="btn btn-next" id="next-btn" onclick="nextQuestion()" disabled>⏭ Next Challenge</button>
+    <button class="btn btn-addtime" id="add-time-btn" onclick="addOneMinute()" disabled>⏱ Add 1 Min</button>
+    <button class="btn btn-stop" onclick="stopQuestion()">🛑 Stop Question</button>
+  </div>
+
+  <div style="margin-top: 15px; text-align: right;">
+    <button class="btn btn-reset" onclick="resetClassSession()">🔄 Reset for New Class</button>
+  </div>
+
+  <div class="status-box">
+    <h3>Current Session Status</h3>
+    <div><b>Active State:</b> <span id="status-text">WAITING</span></div>
+    <div><b>Current Question:</b> <span id="current-q-text">None</span></div>
+    <div id="counter-display" class="counter-badge">Students Answered: 0</div>
+    <div id="timer-display" class="timer">Time Remaining: --:--</div>
+    <img id="question-image" class="hidden question-image" />
+  </div>
+</div>
+
+<div class="card">
+  <h2>Leaderboards</h2>
+  <div class="leaderboard-columns">
+    <div>
+      <h3>Top 10 (Current Question)</h3>
+      <div id="leaderboard-current"><p style="color:#888;">No submissions yet.</p></div>
+    </div>
+    <div>
+      <h3>Top 10 (Overall)</h3>
+      <div id="leaderboard-overall"><p style="color:#888;">No submissions yet.</p></div>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="digestion-card">
+  <h2>Digestion Analytics</h2>
+  <div id="digestion-content">
+    <div class="masked-note">Digestion summary appears here once the current question session is closed.</div>
+  </div>
+</div>
+
+<script>
+  let questions = [];
+  let lastKnownState = { status: 'WAITING', currentQIndex: -1, endTime: 0 };
+  let lastImageQIndex = -2; // sentinel distinct from any real index or -1 (no question)
+  let sessionStateRequestId = 0; // see updateAll()/onSessionState() - guards against out-of-order responses
+  let digestionGeneration = 0; // see updateDigestionVisibility() - bumped only on an actual status/question change
+  let lastDigestionKey = null;
+
+  window.onload = function() {
+    loadQuestions();
+    updateAll();
+    setInterval(updateAll, 1000);
+  };
+
+  function loadQuestions() {
+    google.script.run.withSuccessHandler(function(qList) {
+      questions = qList;
+      const select = document.getElementById('q-select');
+      select.innerHTML = '';
+
+      if (!qList || qList.length === 0) {
+        select.innerHTML = '<option value="">No questions found in spreadsheet</option>';
+        return;
+      }
+
+      select.innerHTML = '<option value="">-- Select a Question --</option>';
+      qList.forEach((q, idx) => {
+        const option = document.createElement('option');
+        option.value = idx;
+        option.text = `Q${q.id}: ${q.text.substring(0, 70)}${q.text.length > 70 ? '...' : ''}`;
+        select.appendChild(option);
+      });
+    }).getQuestions();
+  }
+
+  function onQuestionSelect() {
+    const idxVal = document.getElementById('q-select').value;
+    const durationInput = document.getElementById('duration');
+
+    if (idxVal !== "" && questions[idxVal]) {
+      const q = questions[idxVal];
+      durationInput.value = q.timeLimitSec || 60;
+    }
+  }
+
+  function startQuestion() {
+    const selectEl = document.getElementById('q-select');
+    const idxVal = selectEl.value;
+    const duration = parseInt(document.getElementById('duration').value, 10);
+
+    if (idxVal === "" || idxVal === null || idxVal === undefined) {
+      alert("Please select a valid question from the dropdown list first!");
+      selectEl.focus();
+      return;
+    }
+
+    const parsedIdx = parseInt(idxVal, 10);
+    if (isNaN(parsedIdx) || parsedIdx < 0 || parsedIdx >= questions.length) {
+      alert("Invalid question selection.");
+      return;
+    }
+
+    if (isNaN(duration) || duration < 5) {
+      alert("Please enter a valid duration (minimum 5 seconds).");
+      return;
+    }
+
+    google.script.run
+      .withSuccessHandler(function() {
+        updateAll();
+      })
+      .withFailureHandler(function(err) {
+        alert(err.message);
+      })
+      .setActiveQuestion(parsedIdx, duration);
+  }
+
+  function nextQuestion() {
+    google.script.run
+      .withSuccessHandler(function() {
+        updateAll();
+      })
+      .withFailureHandler(function(err) {
+        alert(err.message);
+      })
+      .launchNextQuestion();
+  }
+
+  function stopQuestion() {
+    google.script.run
+      .withSuccessHandler(function() {
+        updateAll();
+      })
+      .withFailureHandler(function(err) {
+        alert(err.message);
+      })
+      .stopQuestion();
+  }
+
+  function addOneMinute() {
+    google.script.run
+      .withSuccessHandler(function() {
+        updateAll();
+      })
+      .withFailureHandler(function(err) {
+        alert(err.message);
+      })
+      .addTime(60);
+  }
+
+  function resetClassSession() {
+    const step1 = confirm("⚠️ FIRST WARNING: Are you sure you want to reset the class session?\n\nThis will stop any active question and DELETE all student responses from the sheet.");
+    if (!step1) return;
+
+    const step2 = prompt("⚠️ SECOND WARNING: Type RESET in capital letters below to confirm wiping all response data:");
+
+    if (step2 === "RESET") {
+      google.script.run
+        .withSuccessHandler(function(msg) {
+          alert(msg);
+          document.getElementById('q-select').value = "";
+          updateAll();
+        })
+        .withFailureHandler(function(err) {
+          alert(err.message);
+        })
+        .resetSessionForNewClass();
+    } else if (step2 !== null) {
+      alert("Reset canceled. You must type 'RESET' exactly to confirm.");
+    }
+  }
+
+  function updateAll() {
+    // Keep the underlying question data fresh even though the dropdown
+    // (loadQuestions) is only populated once - otherwise a question added
+    // or edited mid-session (e.g. after this tab was already open) can
+    // leave `questions` stale, which previously broke the Next Challenge
+    // enablement check and risked a silent render failure.
+    google.script.run.withSuccessHandler(function(qList) {
+      questions = qList || [];
+    }).getQuestions();
+    // A getSessionState() call issued right after a click (e.g. "Next
+    // Challenge") can resolve BEFORE one issued a moment earlier by the 1s
+    // interval tick - Apps Script round-trip latency isn't ordered. Without
+    // this guard, that late-arriving stale response would overwrite the
+    // fresh ACTIVE state back to the old WAITING one, briefly re-showing
+    // the previous question's Digestion panel (the flash this guards
+    // against). Only the response to the MOST RECENTLY ISSUED call is ever
+    // applied, regardless of arrival order.
+    const thisRequestId = ++sessionStateRequestId;
+    google.script.run.withSuccessHandler(function(state) {
+      if (thisRequestId !== sessionStateRequestId) return;
+      onSessionState(state);
+    }).getSessionState();
+    google.script.run.withSuccessHandler(function(count) {
+      document.getElementById('counter-display').innerText = `Students Answered: ${count}`;
+    }).getStudentResponseCount();
+    google.script.run.withSuccessHandler(renderLeaderboards).getLeaderboards();
+  }
+
+  function onSessionState(state) {
+    lastKnownState = state;
+    document.getElementById('status-text').innerText = state.status;
+
+    if (state.currentQIndex >= 0 && questions[state.currentQIndex]) {
+      document.getElementById('current-q-text').innerText = `Q${questions[state.currentQIndex].id}: ${questions[state.currentQIndex].text}`;
+    } else {
+      document.getElementById('current-q-text').innerText = "None";
+    }
+
+    if (state.status === 'ACTIVE') {
+      const remain = Math.max(0, Math.ceil((state.endTime - Date.now()) / 1000));
+      const mins = Math.floor(remain / 60);
+      const secs = remain % 60;
+      document.getElementById('timer-display').innerText = `Time Remaining: ${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    } else {
+      document.getElementById('timer-display').innerText = "Time Remaining: --:--";
+    }
+
+    const nextBtn = document.getElementById('next-btn');
+    const nextIdx = state.currentQIndex + 1;
+    const hasNextQuestion = nextIdx >= 0 && nextIdx < questions.length;
+    nextBtn.disabled = !hasNextQuestion || state.status === 'ACTIVE';
+
+    document.getElementById('add-time-btn').disabled = (state.status !== 'ACTIVE');
+
+    updateQuestionImage(state);
+    updateDigestionVisibility(state);
+  }
+
+  function updateQuestionImage(state) {
+    // Fetched separately from question data, and only once per activation
+    // (not every 1s poll) - resolving a Drive-hosted image is comparatively
+    // slow, and doing it every tick used to make every request (including
+    // students' Run Test calls) sluggish - see getQuestionImage().
+    const activeIndex = (state.status === 'ACTIVE') ? state.currentQIndex : -1;
+    if (activeIndex === lastImageQIndex) return;
+    lastImageQIndex = activeIndex;
+
+    const imgEl = document.getElementById('question-image');
+    imgEl.classList.add('hidden');
+    imgEl.removeAttribute('src');
+
+    if (activeIndex < 0) return;
+
+    google.script.run
+      .withSuccessHandler(function(url) {
+        if (activeIndex !== lastImageQIndex) return; // moved on before this resolved
+        if (url) {
+          imgEl.src = url;
+          imgEl.classList.remove('hidden');
+        }
+      })
+      .withFailureHandler(function(err) {
+        console.error('getQuestionImage failed:', err.message);
+      })
+      .getQuestionImage(activeIndex);
+  }
+
+  function studentDisplayName(email) {
+    const atIdx = email.indexOf('@');
+    return atIdx > -1 ? email.substring(0, atIdx) : email;
+  }
+
+  function renderLeaderboardTable(containerEl, rows, showQ5Columns) {
+    if (!rows || rows.length === 0) {
+      containerEl.innerHTML = '<p style="color:#888;">No submissions yet.</p>';
+      return;
+    }
+    const extraHeaders = showQ5Columns ? '<th>Bugs Found</th><th>Tests Run</th>' : '';
+    let html = `<table class="grid-table"><thead><tr><th>#</th><th>Name</th><th>Score</th>${extraHeaders}</tr></thead><tbody>`;
+    rows.forEach((r, i) => {
+      const extraCells = showQ5Columns ? `<td>${r.bugsFound}</td><td>${r.testsRun}</td>` : '';
+      html += `<tr><td class="${i === 0 ? 'rank-1' : ''}">${i + 1}</td><td>${studentDisplayName(r.email)}</td><td>${r.score}</td>${extraCells}</tr>`;
+    });
+    html += '</tbody></table>';
+    containerEl.innerHTML = html;
+  }
+
+  function renderLeaderboards(data) {
+    // Bugs Found / Tests Run only mean anything for a TABLE_PRICED question
+    // (Q5, and any future question of that type) - shown on the Current
+    // Question board only when that's actually the current question's type,
+    // and never on the Overall board (which spans all question types).
+    const currentQ = (lastKnownState.currentQIndex >= 0) ? questions[lastKnownState.currentQIndex] : null;
+    const showQ5Columns = !!(currentQ && currentQ.type === 'TABLE_PRICED');
+    renderLeaderboardTable(document.getElementById('leaderboard-current'), data.currentQuestion, showQ5Columns);
+    renderLeaderboardTable(document.getElementById('leaderboard-overall'), data.overall, false);
+  }
+
+  function updateDigestionVisibility(state) {
+    // digestionGeneration only bumps when (status, currentQIndex) actually
+    // changes - NOT on every 1s tick. It used to be tied to the same
+    // counter that increments every tick (sessionStateRequestId), but a
+    // digestion fetch is a second, sequential round trip after the session
+    // state one, and for TABLE_SCORED/TABLE_PRICED (real per-response
+    // scoring work) that pair routinely took longer than one 1s poll
+    // period - so the very next regular tick, even with nothing actually
+    // changed, was invalidating every digestion response before it could
+    // ever render. Keying off actual transitions instead means repeated
+    // ticks for the same still-current question don't invalidate each
+    // other, while a real transition (new question, or question closing)
+    // still correctly discards anything left over from before it.
+    const key = state.status + '|' + state.currentQIndex;
+    if (key !== lastDigestionKey) {
+      lastDigestionKey = key;
+      digestionGeneration++;
+    }
+
+    const content = document.getElementById('digestion-content');
+    const canShow = state.status !== 'ACTIVE' && state.currentQIndex >= 0;
+
+    if (!canShow) {
+      content.innerHTML = '<div class="masked-note">Digestion summary appears here once the current question session is closed.</div>';
+      return;
+    }
+
+    const requestedQIndex = state.currentQIndex;
+    const thisGeneration = digestionGeneration;
+    google.script.run
+      .withSuccessHandler(function(digestion) {
+        if (thisGeneration !== digestionGeneration) return; // the session moved on since this was requested
+        renderDigestion(digestion);
+      })
+      .withFailureHandler(function(err) {
+        if (thisGeneration !== digestionGeneration) return;
+        content.innerHTML = `<div class="masked-note">Error loading digestion: ${err.message}</div>`;
+      })
+      .getQuestionDigestion(requestedQIndex);
+  }
+
+  function renderHistogram(containerEl, histogram) {
+    if (!histogram || histogram.length === 0) {
+      containerEl.innerHTML = '<p style="color:#888;">No responses recorded.</p>';
+      return;
+    }
+    const maxCount = Math.max(...histogram.map(h => h.count));
+    let html = '<div class="histogram">';
+    histogram.forEach(h => {
+      const pct = maxCount > 0 ? Math.round((h.count / maxCount) * 100) : 0;
+      html += `
+        <div class="hist-row">
+          <div class="hist-label">${h.label}</div>
+          <div class="hist-bar-track"><div class="hist-bar" style="width:${pct}%">${h.count}</div></div>
+        </div>`;
+    });
+    html += '</div>';
+    containerEl.innerHTML = html;
+  }
+
+  function renderDigestion(digestion) {
+    const content = document.getElementById('digestion-content');
+    if (!digestion) {
+      content.innerHTML = '<div class="masked-note">No digestion data available.</div>';
+      return;
+    }
+
+    let histTitle = 'Submitted Answers Distribution';
+    if (digestion.qType === 'TABLE') histTitle = 'Missing-Count Distribution';
+    if (digestion.qType === 'TABLE_SCORED') histTitle = 'Result Distribution (Fail / Partial / Pass)';
+    if (digestion.qType === 'TABLE_PRICED') histTitle = 'Bugs Found Per Student';
+
+    content.innerHTML = `
+      <h3>${histTitle}</h3>
+      <div id="digestion-histogram"></div>
+      <div class="correct-answer-box"><b>✅ Correct Answer:</b> ${digestion.correctAnswer || '(none defined)'}</div>
+    `;
+    renderHistogram(document.getElementById('digestion-histogram'), digestion.histogram);
+  }
+</script>
+</body>
+</html>

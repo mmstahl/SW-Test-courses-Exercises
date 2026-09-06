@@ -1,0 +1,5 @@
+Model: Pixel 9, Pixel 9 Pro, Pixel 9 Pro XL
+Storage: 128GB, 256GB, 512GB, 1TB
+Color: Black, Red, Silver, Blue
+Network: 5G, 4G
+Accessory: None, Case, Charger, Earbuds

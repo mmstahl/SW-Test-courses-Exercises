@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background: #f4f6f9; color: #333; }
+    .card { background: white; padding: 25px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 700px; margin: auto; }
+    h2 { color: #003366; margin-top: 0; }
+    .input-group { margin-bottom: 10px; display: flex; gap: 8px; }
+    label { display: block; font-weight: bold; margin-bottom: 5px; }
+    input[type="text"], input[type="number"], input[type="email"] { flex: 1; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; }
+    .btn { background: #003366; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 10px; }
+    .btn-add { background: #27ae60; padding: 8px 15px; font-size: 14px; margin-top: 5px; margin-bottom: 15px; }
+    .btn-remove { background: #c0392b; color: white; border: none; border-radius: 5px; padding: 0 12px; cursor: pointer; }
+    .btn:hover { opacity: 0.9; }
+    .timer { font-size: 22px; font-weight: bold; color: #d9534f; text-align: center; margin-bottom: 15px; }
+    .feedback { font-weight: bold; font-size: 16px; padding: 15px; border-radius: 5px; margin-top: 15px; }
+    .feedback-correct { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+    .feedback-incorrect { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+    .error { color: #d9534f; font-weight: bold; margin-top: 10px; }
+    .hidden { display: none; }
+    .grid-table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 10px; }
+    .grid-table th, .grid-table td { border: 1px solid #ccc; padding: 6px; text-align: center; }
+    .grid-table th { background: #003366; color: white; font-size: 13px; }
+    .grid-table input { width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #ddd; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <!-- STEP 1: EMAIL VERIFICATION -->
+  <div id="email-step">
+    <h2>Welcome to Class</h2>
+    <p>Please enter your Azrieli email address to participate.</p>
+    <div style="margin-bottom: 15px;">
+      <label for="email">Azrieli Email (@post.jce.ac.il):</label>
+      <input type="email" id="email" placeholder="name@post.jce.ac.il" style="width:100%;" />
+    </div>
+    <div id="email-error" class="error hidden">You must enter your Azrieli email address!</div>
+    <button class="btn" style="width:100%;" onclick="confirmEmail()">Join Session</button>
+  </div>
+
+  <!-- STEP 2: WAITING FOR TEACHER -->
+  <div id="waiting-step" class="hidden" style="text-align: center;">
+    <h2>Waiting for Teacher...</h2>
+    <p>Get ready! The next question will appear automatically on your screen.</p>
+  </div>
+
+  <!-- STEP 3: QUESTION & INPUT -->
+  <div id="question-step" class="hidden">
+    <div id="timer-display" class="timer">Time Remaining: --:--</div>
+    <h3 id="question-text">Question goes here</h3>
+    <p id="min-req-note" style="color: #666; font-size: 14px;"></p>
+    
+    <div id="input-area">
+      <div id="answers-container"></div>
+      <button id="add-btn" type="button" class="btn btn-add" onclick="addAnswerField()">+ Add Row / Answer</button>
+      <button id="submit-btn" class="btn" style="width:100%;" onclick="sendAnswers()">Submit Response</button>
+    </div>
+
+    <div id="feedback-box" class="feedback hidden"></div>
+    <div id="status-msg" class="error hidden"></div>
+  </div>
+</div>
+
+<script>
+  let userEmail = "";
+  let questions = [];
+  let currentQIndex = -1;
+  let hasAnsweredCurrent = false;
+  let pollInterval = null;
+
+  // Fixed order for Q3 table columns
+  const FIXED_TABLE_HEADERS = ["Model", "Storage", "Color", "Network", "Accessory"];
+
+  window.onload = function() {
+    google.script.run.withSuccessHandler(function(detectedEmail) {
+      if (detectedEmail) document.getElementById('email').value = detectedEmail;
+    }).getActiveUserEmail();
+
+    google.script.run.withSuccessHandler(function(qList) {
+      questions = qList;
+    }).getQuestions();
+  };
+
+  function confirmEmail() {
+    const emailInput = document.getElementById('email').value.trim().toLowerCase();
+    const errorDiv = document.getElementById('email-error');
+
+    if (!emailInput.endsWith('@post.jce.ac.il')) {
+      errorDiv.innerText = "You must enter your Azrieli email address!";
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+
+    errorDiv.classList.add('hidden');
+    userEmail = emailInput;
+    document.getElementById('email-step').classList.add('hidden');
+    document.getElementById('waiting-step').classList.remove('hidden');
+
+    pollInterval = setInterval(checkSessionState, 1000);
+  }
+
+  function checkSessionState() {
+    google.script.run.withSuccessHandler(function(state) {
+      if (state.status === 'ACTIVE') {
+        if (state.currentQIndex !== currentQIndex) {
+          currentQIndex = state.currentQIndex;
+          hasAnsweredCurrent = false;
+          checkExistingSubmissionAndRender(questions[currentQIndex], state.endTime);
+        } else if (!hasAnsweredCurrent) {
+          updateTimer(state.endTime);
+        }
+      } else {
+        document.getElementById('question-step').classList.add('hidden');
+        document.getElementById('waiting-step').classList.remove('hidden');
+      }
+    }).getSessionState();
+  }
+
+  function formatTime(totalSeconds) {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function checkExistingSubmissionAndRender(q, endTime) {
+    google.script.run.withSuccessHandler(function(existing) {
+      document.getElementById('waiting-step').classList.add('hidden');
+      document.getElementById('question-step').classList.remove('hidden');
+      document.getElementById('status-msg').classList.add('hidden');
+      document.getElementById('question-text').innerText = q.text;
+
+      if (q.type === "TABLE") {
+        document.getElementById('min-req-note').innerText = "Fill in the grid with all required items across categories. You can copy & paste rows directly from Excel!";
+      } else {
+        const limitNote = q.minAnswers === q.maxAnswers 
+          ? `Required numerical answers: ${q.minAnswers}` 
+          : `Provide between ${q.minAnswers} and ${q.maxAnswers} numerical answers.`;
+        document.getElementById('min-req-note').innerText = limitNote;
+      }
+
+      if (existing) {
+        hasAnsweredCurrent = true;
+        showFeedback(existing.isOverallCorrect, existing.submittedAnswers, q.type, existing.score);
+      } else {
+        document.getElementById('input-area').classList.remove('hidden');
+        document.getElementById('feedback-box').classList.add('hidden');
+        
+        const container = document.getElementById('answers-container');
+        container.innerHTML = '';
+
+        if (q.type === "TABLE") {
+          renderTableQuestion(q);
+        } else {
+          for (let i = 0; i < q.minAnswers; i++) {
+            addAnswerField();
+          }
+          updateAddButtonVisibility();
+        }
+        updateTimer(endTime);
+      }
+    }).getStudentSubmission(userEmail, q.id);
+  }
+
+  function renderTableQuestion(qObj) {
+    const container = document.getElementById('answers-container');
+
+    let html = `
+      <table class="grid-table" id="student-grid">
+        <thead>
+          <tr>
+            ${FIXED_TABLE_HEADERS.map(h => `<th>${h}</th>`).join('')}
+            <th style="width: 30px;"></th>
+          </tr>
+        </thead>
+        <tbody id="grid-body"></tbody>
+      </table>
+    `;
+    container.innerHTML = html;
+
+    const startRows = Math.max(qObj.minAnswers, 4);
+    for (let i = 0; i < startRows; i++) {
+      addGridRow();
+    }
+    updateAddButtonVisibility();
+  }
+
+  function addGridRow() {
+    const qObj = questions[currentQIndex];
+    const tbody = document.getElementById('grid-body');
+    if (!tbody) return;
+
+    // Enforce maxAnswers limit on Q3 table
+    const currentRows = tbody.querySelectorAll('tr').length;
+    if (qObj && currentRows >= qObj.maxAnswers) return;
+
+    const tr = document.createElement('tr');
+    let cellsHtml = FIXED_TABLE_HEADERS.map(h => `
+      <td><input type="text" class="grid-cell" data-header="${h}" placeholder="${h}..." autocomplete="off" onpaste="handleTablePaste(event, this)" /></td>
+    `).join('');
+    
+    cellsHtml += `<td><button type="button" class="btn-remove" onclick="removeGridRow(this)">✕</button></td>`;
+    tr.innerHTML = cellsHtml;
+    tbody.appendChild(tr);
+
+    updateAddButtonVisibility();
+  }
+
+  function removeGridRow(btn) {
+    btn.closest('tr').remove();
+    updateAddButtonVisibility();
+  }
+
+  // Excel Copy-Paste Handling
+  function handleTablePaste(e, targetInput) {
+    e.preventDefault();
+    const clipboardData = (e.clipboardData || window.clipboardData).getData('text');
+    if (!clipboardData) return;
+
+    const rows = clipboardData.split(/\r\n|\n|\r/).filter(row => row.trim().length > 0);
+    if (rows.length === 0) return;
+
+    const startTr = targetInput.closest('tr');
+    const tbody = document.getElementById('grid-body');
+    const allTrs = Array.from(tbody.querySelectorAll('tr'));
+    let startRowIdx = allTrs.indexOf(startTr);
+    const startColIdx = FIXED_TABLE_HEADERS.indexOf(targetInput.dataset.header);
+
+    const qObj = questions[currentQIndex];
+
+    rows.forEach((rowText, rOffset) => {
+      let targetRowIdx = startRowIdx + rOffset;
+
+      // Add dynamic row if paste exceeds current table rows (up to maxAnswers)
+      if (targetRowIdx >= tbody.querySelectorAll('tr').length) {
+        if (qObj && tbody.querySelectorAll('tr').length >= qObj.maxAnswers) return;
+        addGridRow();
+      }
+
+      const currentRow = tbody.querySelectorAll('tr')[targetRowIdx];
+      if (!currentRow) return;
+
+      const cells = rowText.split('\t');
+      cells.forEach((cellVal, cOffset) => {
+        const targetColIdx = startColIdx + cOffset;
+        if (targetColIdx < FIXED_TABLE_HEADERS.length) {
+          const headerName = FIXED_TABLE_HEADERS[targetColIdx];
+          const inputEl = currentRow.querySelector(`input[data-header="${headerName}"]`);
+          if (inputEl) inputEl.value = cellVal.trim();
+        }
+      });
+    });
+
+    updateAddButtonVisibility();
+  }
+
+  function addAnswerField(val = '') {
+    const qObj = questions[currentQIndex];
+    if (qObj && qObj.type === "TABLE") {
+      addGridRow();
+      return;
+    }
+
+    const container = document.getElementById('answers-container');
+    const currentCount = container.querySelectorAll('.input-group').length;
+
+    if (qObj && currentCount >= qObj.maxAnswers) return;
+
+    const div = document.createElement('div');
+    div.className = 'input-group';
+    
+    const removeBtnHtml = (qObj && qObj.maxAnswers > 1) 
+      ? `<button type="button" class="btn-remove" onclick="removeAnswerField(this)">✕</button>` 
+      : '';
+
+    div.innerHTML = `
+      <input type="number" class="ans-input" placeholder="Enter number..." value="${val}" autocomplete="off" />
+      ${removeBtnHtml}
+    `;
+    container.appendChild(div);
+    updateAddButtonVisibility();
+  }
+
+  function removeAnswerField(btnElement) {
+    btnElement.parentElement.remove();
+    updateAddButtonVisibility();
+  }
+
+  function updateAddButtonVisibility() {
+    if (currentQIndex < 0 || !questions[currentQIndex]) return;
+    const qObj = questions[currentQIndex];
+    const addBtn = document.getElementById('add-btn');
+    if (!addBtn) return;
+
+    let currentCount = 0;
+    if (qObj.type === "TABLE") {
+      const tbody = document.getElementById('grid-body');
+      currentCount = tbody ? tbody.querySelectorAll('tr').length : 0;
+    } else {
+      const container = document.getElementById('answers-container');
+      currentCount = container ? container.querySelectorAll('.input-group').length : 0;
+    }
+
+    if (currentCount >= qObj.maxAnswers) {
+      addBtn.style.display = 'none';
+    } else {
+      addBtn.style.display = 'inline-block';
+    }
+  }
+
+  function updateTimer(endTime) {
+    const remain = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+    document.getElementById('timer-display').innerText = `Time Remaining: ${formatTime(remain)}`;
+    if (remain <= 0 && !hasAnsweredCurrent) {
+      document.getElementById('input-area').classList.add('hidden');
+      document.getElementById('feedback-box').className = 'feedback feedback-incorrect';
+      document.getElementById('feedback-box').innerText = 'So sad! Your answer is incorrect! (Fail)';
+      document.getElementById('feedback-box').classList.remove('hidden');
+    }
+  }
+
+  function collectTablePayload() {
+    const rows = document.querySelectorAll('#grid-body tr');
+    const payload = [];
+
+    rows.forEach(tr => {
+      const rowData = {};
+      let hasData = false;
+      const inputs = tr.querySelectorAll('.grid-cell');
+      inputs.forEach(input => {
+        const val = input.value.trim();
+        if (val) hasData = true;
+        rowData[input.dataset.header] = val;
+      });
+      if (hasData) payload.push(rowData);
+    });
+
+    return payload;
+  }
+
+  function sendAnswers() {
+    const qObj = questions[currentQIndex];
+    let payload = null;
+
+    if (qObj.type === "TABLE") {
+      payload = collectTablePayload();
+      if (payload.length === 0) {
+        document.getElementById('status-msg').innerText = "Please fill in at least one row of the table.";
+        document.getElementById('status-msg').classList.remove('hidden');
+        return;
+      }
+      // Require fully filled table rows
+      for (let r of payload) {
+        for (let h of FIXED_TABLE_HEADERS) {
+          if (!r[h]) {
+            document.getElementById('status-msg').innerText = `All cells in row must be filled (missing ${h}).`;
+            document.getElementById('status-msg').classList.remove('hidden');
+            return;
+          }
+        }
+      }
+    } else {
+      payload = Array.from(document.querySelectorAll('.ans-input')).map(i => i.value.trim()).filter(Boolean);
+      if (payload.length < qObj.minAnswers) {
+        document.getElementById('status-msg').innerText = `Please provide at least ${qObj.minAnswers} answer(s).`;
+        document.getElementById('status-msg').classList.remove('hidden');
+        return;
+      }
+      for (let val of payload) {
+        if (isNaN(val)) {
+          document.getElementById('status-msg').innerText = "Answers must be valid numbers.";
+          document.getElementById('status-msg').classList.remove('hidden');
+          return;
+        }
+      }
+    }
+
+    hasAnsweredCurrent = true;
+    document.getElementById('input-area').classList.add('hidden');
+    document.getElementById('status-msg').classList.add('hidden');
+
+    google.script.run
+      .withSuccessHandler((res) => {
+        showFeedback(res.isOverallCorrect, payload, qObj.type, res.score);
+      })
+      .withFailureHandler((err) => {
+        document.getElementById('status-msg').innerText = err.message;
+        document.getElementById('status-msg').classList.remove('hidden');
+        document.getElementById('input-area').classList.remove('hidden');
+        hasAnsweredCurrent = false;
+      })
+      .submitAnswers(userEmail, qObj.id, payload);
+  }
+
+  function showFeedback(isOverallCorrect, payload, qType, score) {
+    document.getElementById('input-area').classList.add('hidden');
+    const box = document.getElementById('feedback-box');
+    box.classList.remove('hidden');
+
+    let html = `<div><b>Your Submitted Answers:</b></div>`;
+
+    if (qType === "TABLE" && Array.isArray(payload)) {
+      html += `<table class="grid-table" style="margin-top:5px; background:white;"><thead><tr>`;
+      if (payload.length > 0) {
+        FIXED_TABLE_HEADERS.forEach(h => { html += `<th>${h}</th>`; });
+        html += `</tr></thead><tbody>`;
+        payload.forEach(row => {
+          html += `<tr>`;
+          FIXED_TABLE_HEADERS.forEach(k => { html += `<td>${row[k] || ''}</td>`; });
+          html += `</tr>`;
+        });
+        html += `</tbody></table>`;
+      }
+    } else if (Array.isArray(payload)) {
+      html += `<ul style="margin: 5px 0 10px 20px;">`;
+      payload.forEach(a => { html += `<li>${a}</li>`; });
+      html += `</ul>`;
+    }
+
+    if (isOverallCorrect) {
+      box.className = 'feedback feedback-correct';
+      box.innerHTML = html + `<b>Result:</b> All conditions were met! (Pass)<br><b>Points Earned:</b> +${score}`;
+    } else {
+      box.className = 'feedback feedback-incorrect';
+      box.innerHTML = html + '<b>Result:</b> So sad! Your answer is incorrect! (Fail)';
+    }
+  }
+</script>
+</body>
+</html>

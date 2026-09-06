@@ -1,0 +1,26 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Get_a_room.py",
+            "type": "python",
+            "request": "launch",
+            "python": "D:\\Utils\\Python312\\python.exe",
+            "program": "${file}",
+            "args":["5/10/26", "15/10/26", "--single", "3"],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "tests.py",
+            "type": "python",
+            "request": "launch",
+            "python": "D:\\Utils\\Python312\\python.exe",
+            "program": "${file}",
+            "args":[],
+            "console": "integratedTerminal"
+        },
+    ]
+}

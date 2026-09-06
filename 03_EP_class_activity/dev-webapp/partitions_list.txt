@@ -1,0 +1,21 @@
+EP_VALID_NORMAL: Scale and translation are perfectly within bounds.  
+EP_SCALE_OVER_CLAMP: Scale > 2.0 (triggers FR-10).  
+EP_SCALE_UNDER_CLAMP: Scale < 0.25 (triggers FR-11).  
+EP_TRANS_OVER_CLAMP: Translation above 10 (triggers FR-12.2).  
+EP_TRANS_UNDER_CLAMP: Translation below -10 (triggers FR-12.1).  
+EP_TRANS_FLOAT: Translation input given as a float (triggers FR-15).  
+EP_IMPLICIT_HELP: Help blurb printed if no input parameter is provided
+ER_1_INFILE_OPEN_FAIL: The input file fails to open.  
+ER_2_INFILE_NOT_EXISTING: The input file does not exist.  
+ER_3_INFILE_NO_ACCESS: The input file cannot be accessed.  
+ER_4_OUTFILE_NAME_TOO_LONG: The output file name is too long.  
+ER_5_OUTFILE_CANT_CREATE: The output file cannot be created (fails to open).  
+ER_6_INFILE_NOT_OBJ: The input file is not an .obj file.  
+ER_7_INFILE_INCOMPLETE_OBJ: The input file is a corrupted .obj file (incomplete data).  
+ER_8_1_INFILE_EMPTY: The input file is empty (0-size file)
+ER_8_2_INFILE_MISSING_VERTICES: No v lines in the file
+ER_9_1_MISSING_SCALE_TRANS: Missing scale and translation parameters.  
+ER_9_2_MISSING_TRANS: Missing translation parameter.  
+ER_10_OUTFILE_EXISTS: Output file already exists.  
+ER_11_NON_NUMERIC_SCALE: The scale input contains non-numeric data.  
+ER_12_NON_NUMERIC_TRANS: The translation input contains non-numeric data.  

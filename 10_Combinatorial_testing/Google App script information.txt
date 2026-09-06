@@ -1,0 +1,25 @@
+Script file name: 
+
+Deployment ID: 
+AKfycbx9WLBBqdzc7x9S68HGBvaT4hmO-E6BmIyQvZaFFmQc_njmqGhCYIY9ta_qZsE4md4-dw
+
+
+Web app URL:
+https://script.google.com/macros/s/AKfycbx9WLBBqdzc7x9S68HGBvaT4hmO-E6BmIyQvZaFFmQc_njmqGhCYIY9ta_qZsE4md4-dw/exec
+
+Teacher's:
+https://script.google.com/macros/s/AKfycbx9WLBBqdzc7x9S68HGBvaT4hmO-E6BmIyQvZaFFmQc_njmqGhCYIY9ta_qZsE4md4-dw/exec?role=teacher
+
+
+
+Need to: 
+- Better response when entring a non-Azrieli mail
+- The Digestion & Submission summary shows already while the question runs - we don't want that
+- I want different digestion for each question. For example, for Q1 and Q2: histogram
+- When an answer is FAIL, change the response. Currently: "Result: One or more inputs were invalid or missing required items. (Fail)"
+- The digestion display of Q3 jumps around. Also: make the input table capable of getting a table-copy from Excel (update all table or at least a row)/ And the order of columns need to be Model, storage, Color, network , Accessory
+- Teacher's display should show the score of students, listing the top 10 overall, and the top 10 for the current question. 
+- Each question needs to have a score. Students get these points if they answered correctly, plus the number of seconds left when they answered. 
+- Enforce correct answer type (number in Q1, Q2; 4 full tests in Q3)
+
+

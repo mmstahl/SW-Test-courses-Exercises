@@ -1,0 +1,38 @@
+services:
+  sandbox:
+    build:
+      context: docker/wine-build
+      dockerfile: Dockerfile
+    image: wine-pyinstaller:py3.9.13
+    volumes:
+      - .:/repo
+      - ./student-workspace:/out
+    environment:
+      REPO_DIR: /repo
+      OUT_DIR: /out
+      BUILD_TARGET: ${BUILD_TARGET:-all}
+
+  jupyter:
+    image: students
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sw-test-jupyter
+    depends_on:
+      sandbox:
+        condition: service_completed_successfully
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./student-workspace:/home/jovyan/work
+    working_dir: /home/jovyan/work
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      CHOWN_HOME: "yes"
+      CHOWN_HOME_OPTS: "-R"
+    command: >
+      start-notebook.sh
+      --NotebookApp.token=''
+      --NotebookApp.password=''
+      --ip=0.0.0.0
+      --port=8888

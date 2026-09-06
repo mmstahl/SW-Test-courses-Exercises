@@ -1,0 +1,80 @@
+('D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+ 'materials\\Exercises\\03 EP class '
+ 'activity\\dev\\build\\transform_obj\\transform_obj.pkg',
+ {'BINARY': True,
+  'DATA': True,
+  'EXECUTABLE': True,
+  'EXTENSION': True,
+  'PYMODULE': True,
+  'PYSOURCE': True,
+  'PYZ': False,
+  'SPLASH': True,
+  'SYMLINK': False},
+ [('pyi-contents-directory _internal', '', 'OPTION'),
+  ('PYZ-00.pyz',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class '
+   'activity\\dev\\build\\transform_obj\\PYZ-00.pyz',
+   'PYZ'),
+  ('struct',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class '
+   'activity\\dev\\build\\transform_obj\\localpycs\\struct.pyc',
+   'PYMODULE'),
+  ('pyimod01_archive',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class '
+   'activity\\dev\\build\\transform_obj\\localpycs\\pyimod01_archive.pyc',
+   'PYMODULE'),
+  ('pyimod02_importers',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class '
+   'activity\\dev\\build\\transform_obj\\localpycs\\pyimod02_importers.pyc',
+   'PYMODULE'),
+  ('pyimod03_ctypes',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class '
+   'activity\\dev\\build\\transform_obj\\localpycs\\pyimod03_ctypes.pyc',
+   'PYMODULE'),
+  ('pyimod04_pywin32',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class '
+   'activity\\dev\\build\\transform_obj\\localpycs\\pyimod04_pywin32.pyc',
+   'PYMODULE'),
+  ('pyiboot01_bootstrap',
+   'D:\\Utils\\Python312\\Lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
+   'PYSOURCE'),
+  ('pyi_rth_inspect',
+   'D:\\Utils\\Python312\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_inspect.py',
+   'PYSOURCE'),
+  ('transform_obj',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class activity\\dev\\transform_obj.py',
+   'PYSOURCE'),
+  ('python312.dll', 'D:\\Utils\\Python312\\python312.dll', 'BINARY'),
+  ('_decimal.pyd', 'D:\\Utils\\Python312\\DLLs\\_decimal.pyd', 'EXTENSION'),
+  ('_hashlib.pyd', 'D:\\Utils\\Python312\\DLLs\\_hashlib.pyd', 'EXTENSION'),
+  ('_lzma.pyd', 'D:\\Utils\\Python312\\DLLs\\_lzma.pyd', 'EXTENSION'),
+  ('_bz2.pyd', 'D:\\Utils\\Python312\\DLLs\\_bz2.pyd', 'EXTENSION'),
+  ('select.pyd', 'D:\\Utils\\Python312\\DLLs\\select.pyd', 'EXTENSION'),
+  ('_socket.pyd', 'D:\\Utils\\Python312\\DLLs\\_socket.pyd', 'EXTENSION'),
+  ('unicodedata.pyd',
+   'D:\\Utils\\Python312\\DLLs\\unicodedata.pyd',
+   'EXTENSION'),
+  ('_ssl.pyd', 'D:\\Utils\\Python312\\DLLs\\_ssl.pyd', 'EXTENSION'),
+  ('VCRUNTIME140.dll', 'D:\\Utils\\Python312\\VCRUNTIME140.dll', 'BINARY'),
+  ('libcrypto-3.dll', 'D:\\Utils\\Python312\\DLLs\\libcrypto-3.dll', 'BINARY'),
+  ('libssl-3.dll', 'D:\\Utils\\Python312\\DLLs\\libssl-3.dll', 'BINARY'),
+  ('base_library.zip',
+   'D:\\OneDrive\\Documents\\SW Test courses 2027\\Shared course '
+   'materials\\Exercises\\03 EP class '
+   'activity\\dev\\build\\transform_obj\\base_library.zip',
+   'DATA')],
+ 'python312.dll',
+ False,
+ False,
+ False,
+ [],
+ None,
+ None,
+ None)

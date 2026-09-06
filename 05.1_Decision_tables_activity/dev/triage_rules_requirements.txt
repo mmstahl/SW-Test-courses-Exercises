@@ -1,0 +1,26 @@
+The following are triage rules for an emergency ward:
+    - When a person checks in, measure their blood pressure (integer, between 0 and 250), temperature float betewwn 35.0 and 42.0 
+    - blood pressure is categorized to 2 categories: low (up to 100) and high (above 100). 
+    - temperature is categorized to 2 categories: healthy: 36.5 to 37.5 and unhealthy: 35-36.4999 , 37.50001 and 42.0)
+    - document if they have chest pains (Y, N)
+    
+    
+   the triage rules are as follows: 
+       - healthy temperure and low blood presure: send home, unless they report chest pains
+       - Anyone with chest pains: see doctor
+       - High temperature (Above 37.5) and high blood pressure: see doctor
+       - anything else: see nurse
+       
+    treatment rules: 
+        - Anyone who needs to see a doctor: hospitlize, unless their temperature is below 37.500001, in which case: do EKG
+        - Anyone with high temperature: Acamol
+        - Low blood pressure and temperature below 36.5: give Vodka
+        
+       - Treatments are accumulative (a patient may be given more than a single treatment. 
+       
+       
+ Write python code that accepts blood pressure, temperature and chest pain input and prints the triage and treatment. 
+ print error message with details if the input is outside the defined range for clood presure and temperature, or if checst pains is not case-insensitive Y or N. 
+ print error message if blood pressure is a float. Print error message if blood pressure or temperature are not numbers. 
+
+
