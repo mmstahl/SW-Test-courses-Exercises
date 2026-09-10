@@ -1,0 +1,421 @@
+<style>
+  body { font-family: Arial, sans-serif; max-width: 560px; margin: 24px auto; color: #222; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; margin-top: 28px; }
+  .field { margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; }
+  input[type="email"], input[type="text"], select {
+    width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 14px;
+    border: 1px solid #999; border-radius: 4px;
+  }
+  .actions { margin: 16px 0; }
+  button { padding: 8px 16px; font-size: 14px; margin-right: 8px; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: 0.5; }
+  #price-breakdown, #store-credit-wrap, #return-section, #reset-wrap, #purchase-history {
+    border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-top: 12px; background: #fafafa;
+  }
+  #price-breakdown div { margin: 4px 0; }
+  #purchase-history { max-height: 220px; overflow-y: auto; }
+  #purchase-history h2 { margin: 0 0 8px; font-size: 14px; }
+  #purchase-history-list { margin: 0; padding-left: 20px; }
+  #purchase-history-list li { margin: 4px 0; }
+  .error { color: #b00020; margin-top: 12px; font-weight: bold; }
+  .status-unknown { color: #b00020; font-weight: bold; margin-left: 8px; }
+  .status-valid { color: #0a7a2f; font-weight: bold; margin-left: 8px; }
+  #return-message.success { color: #0a7a2f; }
+  #return-message.failure { color: #b00020; }
+</style>
+
+<div id="app">
+  <h1>Phone Configurator Simulator</h1>
+
+  <div class="field">
+    <label for="student-email">Email</label>
+    <input type="email" id="student-email" maxlength="100" placeholder="you@example.com" autocomplete="off">
+  </div>
+
+  <div class="field">
+    <label for="model-select">Model</label>
+    <select id="model-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="storage-select">Storage</label>
+    <select id="storage-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="color-select">Color</label>
+    <select id="color-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="network-select">Network</label>
+    <select id="network-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="accessory-select">Accessory</label>
+    <select id="accessory-select"><option value="">-- select --</option></select>
+  </div>
+
+  <div class="field" id="discount-field-wrap" hidden>
+    <label for="discount-code">Discount code</label>
+    <input type="text" id="discount-code" maxlength="7" autocomplete="off">
+    <span id="discount-status"></span>
+  </div>
+
+  <div class="actions">
+    <button id="calc-price-btn">Calculate Price</button>
+    <button id="buy-btn" disabled>Buy</button>
+  </div>
+
+  <div id="price-breakdown" hidden>
+    <div id="total-price-row">Total Price: $<span id="total-price">0.00</span></div>
+    <div id="phone-price-row" hidden>Phone price: $<span id="phone-price">0.00</span></div>
+    <div id="applied-credit-row" hidden>Applied credit: $<span id="applied-credit">0.00</span></div>
+    <div id="requested-payment-row" hidden>Requested payment: $<span id="requested-payment">0.00</span></div>
+    <div id="generated-code-row" hidden>New discount code: <span id="generated-code"></span></div>
+    <div id="no-code-row" hidden>No discount codes for discounted purchases</div>
+  </div>
+
+  <div id="store-credit-wrap" hidden>
+    Store credit: $<span id="store-credit-balance">0.00</span>
+  </div>
+
+  <div id="purchase-history" hidden>
+    <h2>Your Purchases</h2>
+    <ul id="purchase-history-list"></ul>
+  </div>
+
+  <div id="return-section" hidden>
+    <h2>Return</h2>
+    <label><input type="radio" name="refund-type" value="Refund" checked> Refund</label>
+    <label><input type="radio" name="refund-type" value="StoreCredit"> Store credit</label>
+    <div class="actions">
+      <button id="return-btn" disabled>Return</button>
+    </div>
+    <div id="return-message"></div>
+  </div>
+
+  <div id="reset-wrap" hidden>
+    <button id="reset-btn">Reset my data</button>
+  </div>
+
+  <div id="error-message" class="error" hidden></div>
+</div>
+
+<script>
+  var OPTIONS = <?!= optionsJson ?>;
+  var UI_CONFIG = <?!= uiConfigJson ?>;
+  var PRICE_TABLE = <?!= priceTableJson ?>;
+  var PARAM_KEY_MAP = { model: 'Model', storage: 'Storage', color: 'Color', network: 'Network', accessory: 'Accessory' };
+  var EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  var els = {
+    email: document.getElementById('student-email'),
+    selects: {
+      Model: document.getElementById('model-select'),
+      Storage: document.getElementById('storage-select'),
+      Color: document.getElementById('color-select'),
+      Network: document.getElementById('network-select'),
+      Accessory: document.getElementById('accessory-select')
+    },
+    discountWrap: document.getElementById('discount-field-wrap'),
+    discountCode: document.getElementById('discount-code'),
+    discountStatus: document.getElementById('discount-status'),
+    calcBtn: document.getElementById('calc-price-btn'),
+    buyBtn: document.getElementById('buy-btn'),
+    priceBreakdown: document.getElementById('price-breakdown'),
+    totalPrice: document.getElementById('total-price'),
+    phonePriceRow: document.getElementById('phone-price-row'),
+    phonePrice: document.getElementById('phone-price'),
+    appliedCreditRow: document.getElementById('applied-credit-row'),
+    appliedCredit: document.getElementById('applied-credit'),
+    requestedPaymentRow: document.getElementById('requested-payment-row'),
+    requestedPayment: document.getElementById('requested-payment'),
+    generatedCodeRow: document.getElementById('generated-code-row'),
+    generatedCode: document.getElementById('generated-code'),
+    noCodeRow: document.getElementById('no-code-row'),
+    storeCreditWrap: document.getElementById('store-credit-wrap'),
+    storeCreditBalance: document.getElementById('store-credit-balance'),
+    returnSection: document.getElementById('return-section'),
+    returnBtn: document.getElementById('return-btn'),
+    returnMessage: document.getElementById('return-message'),
+    resetWrap: document.getElementById('reset-wrap'),
+    resetBtn: document.getElementById('reset-btn'),
+    purchaseHistory: document.getElementById('purchase-history'),
+    purchaseHistoryList: document.getElementById('purchase-history-list'),
+    errorMessage: document.getElementById('error-message')
+  };
+
+  var everFullyConfigured = false;
+  // Buy stays disabled until Calculate Price has run for the CURRENT inputs.
+  // Any change to a parameter or the discount code invalidates it again —
+  // clicking Buy itself does not (so repeated Buy clicks against the same
+  // calculated configuration are allowed, e.g. buying several identical
+  // phones in a row).
+  var priceCalculated = false;
+
+  function populateSelects() {
+    Object.keys(els.selects).forEach(function (param) {
+      var select = els.selects[param];
+      (OPTIONS[param] || []).forEach(function (opt) {
+        var o = document.createElement('option');
+        o.value = opt;
+        o.textContent = opt;
+        select.appendChild(o);
+      });
+    });
+  }
+
+  function applyUiConfig() {
+    els.discountWrap.hidden = UI_CONFIG.level < 2;
+    els.returnSection.hidden = UI_CONFIG.level < 4;
+    els.storeCreditWrap.hidden = UI_CONFIG.level < 4;
+    els.resetWrap.hidden = !UI_CONFIG.studentResetEnabled;
+  }
+
+  function clearError() { els.errorMessage.hidden = true; els.errorMessage.textContent = ''; }
+  function showError(err) {
+    els.errorMessage.hidden = false;
+    els.errorMessage.textContent = err && err.message ? err.message : String(err);
+  }
+
+  function getConfig() {
+    return {
+      model: els.selects.Model.value,
+      storage: els.selects.Storage.value,
+      color: els.selects.Color.value,
+      network: els.selects.Network.value,
+      accessory: els.selects.Accessory.value
+    };
+  }
+
+  function buildParams(extra) {
+    var p = getConfig();
+    p.email = els.email.value.trim();
+    p.discountCode = els.discountCode.value.trim();
+    if (extra) Object.keys(extra).forEach(function (k) { p[k] = extra[k]; });
+    return p;
+  }
+
+  function updateBuyButtonState() {
+    var cfg = getConfig();
+    var allFilled = Object.keys(cfg).every(function (k) { return !!cfg[k]; });
+    if (allFilled) everFullyConfigured = true;
+    var configOk = allFilled || (UI_CONFIG.allowBuyWithPartialConfig && everFullyConfigured);
+    els.buyBtn.disabled = !(configOk && priceCalculated);
+  }
+
+  function invalidateCalculation() {
+    priceCalculated = false;
+    updateBuyButtonState();
+  }
+
+  function computeBasePriceClient(cfg) {
+    var total = 0;
+    Object.keys(PARAM_KEY_MAP).forEach(function (k) {
+      var tableKey = PARAM_KEY_MAP[k];
+      var val = cfg[k];
+      if (val && PRICE_TABLE[tableKey] && PRICE_TABLE[tableKey].hasOwnProperty(val)) {
+        total += PRICE_TABLE[tableKey][val];
+      }
+    });
+    return Math.round(total * 100) / 100;
+  }
+
+  // A server round trip is only actually needed when server-side data is
+  // involved: a discount code (validity lives in the DiscountCodes sheet)
+  // or store credit (Level 4). Otherwise the base price is just a lookup
+  // sum over publicly-known PRICE_TABLE values, computed here instantly.
+  function needsServerCalculation() {
+    var codeEntered = !els.discountWrap.hidden && els.discountCode.value.trim().length > 0;
+    return codeEntered || UI_CONFIG.level >= 4;
+  }
+
+  function buildCongratsMessage(cfg) {
+    var msg = 'Congratulations! You are now the owner of a ' + cfg.Network + ' ' + cfg.Color + ' ' + cfg.Model + ' with ' + cfg.Storage;
+    if (cfg.Accessory && cfg.Accessory !== 'None') {
+      var article = (cfg.Accessory === 'Case' || cfg.Accessory === 'Charger') ? 'a ' : '';
+      msg += ' and ' + article + cfg.Accessory;
+    }
+    msg += '.';
+    return msg;
+  }
+
+  function addPurchaseToHistory(config) {
+    var li = document.createElement('li');
+    li.textContent = buildCongratsMessage(config);
+    els.purchaseHistoryList.appendChild(li);
+    els.purchaseHistory.hidden = false;
+    els.purchaseHistory.scrollTop = els.purchaseHistory.scrollHeight;
+  }
+
+  // Briefly clears an element's text, then fills in the new value shortly
+  // after — so a value that happens to come back unchanged still visibly
+  // updates, giving feedback that the click actually did something.
+  var BLINK_DELAY_MS = 150;
+  function blinkText(el, text, className) {
+    el.textContent = '';
+    if (className !== undefined) el.className = '';
+    setTimeout(function () {
+      el.textContent = text;
+      if (className !== undefined) el.className = className;
+    }, BLINK_DELAY_MS);
+  }
+
+  function renderDiscountStatus(discount) {
+    var text = '';
+    var cls = '';
+    if (discount && discount.entered) {
+      if (discount.valid) {
+        text = 'Applied (15% off)';
+        cls = 'status-valid';
+      } else if (discount.message) {
+        text = discount.message;
+        cls = 'status-unknown';
+      }
+    }
+    blinkText(els.discountStatus, text, cls);
+  }
+
+  function renderPriceBreakdown(result) {
+    els.priceBreakdown.hidden = false;
+    els.generatedCodeRow.hidden = true;
+    els.noCodeRow.hidden = true;
+    renderDiscountStatus(result.discountCode);
+
+    if (UI_CONFIG.level >= 4) {
+      var total = (result.requestedPayment !== undefined ? result.requestedPayment : result.paidPrice);
+      blinkText(els.totalPrice, total.toFixed(2));
+      els.phonePriceRow.hidden = false;
+      blinkText(els.phonePrice, result.paidPrice.toFixed(2));
+      els.appliedCreditRow.hidden = false;
+      blinkText(els.appliedCredit, (result.creditApplied || 0).toFixed(2));
+      els.requestedPaymentRow.hidden = false;
+      blinkText(els.requestedPayment, total.toFixed(2));
+      if (result.creditBalance !== undefined) {
+        els.storeCreditBalance.textContent = Number(result.creditBalance).toFixed(2);
+      }
+    } else {
+      blinkText(els.totalPrice, result.paidPrice.toFixed(2));
+      els.phonePriceRow.hidden = true;
+      els.appliedCreditRow.hidden = true;
+      els.requestedPaymentRow.hidden = true;
+    }
+  }
+
+  els.calcBtn.addEventListener('click', function () {
+    clearError();
+    if (!EMAIL_RE.test(els.email.value.trim())) {
+      showError({ message: 'A valid email address is required.' });
+      return;
+    }
+    var params = buildParams();
+
+    if (needsServerCalculation()) {
+      google.script.run
+        .withSuccessHandler(function (result) {
+          renderPriceBreakdown(result);
+          priceCalculated = true;
+          updateBuyButtonState();
+        })
+        .withFailureHandler(showError)
+        .calculatePrice(params);
+    } else {
+      // Instant, client-side — see needsServerCalculation() above.
+      var basePrice = computeBasePriceClient(getConfig());
+      renderPriceBreakdown({ paidPrice: basePrice, discountCode: { entered: '', valid: false, message: null } });
+      priceCalculated = true;
+      updateBuyButtonState();
+      // Fire-and-forget: same calculation, run server-side purely so this
+      // action still gets logged (ActionLog), without making the student
+      // wait for it. Its result is intentionally ignored.
+      google.script.run.calculatePrice(params);
+    }
+  });
+
+  els.buyBtn.addEventListener('click', function () {
+    clearError();
+    google.script.run
+      .withSuccessHandler(function (result) {
+        renderPriceBreakdown(result);
+        if (result.generatedCode) {
+          els.generatedCodeRow.hidden = false;
+          els.generatedCode.textContent = result.generatedCode;
+        } else if (UI_CONFIG.level >= 2) {
+          els.noCodeRow.hidden = false;
+        }
+        if (result.creditBalance !== undefined) {
+          els.storeCreditBalance.textContent = Number(result.creditBalance).toFixed(2);
+        }
+        els.returnBtn.disabled = !result.returnEnabled;
+        addPurchaseToHistory(result.config);
+      })
+      .withFailureHandler(showError)
+      .buyPhone(buildParams());
+  });
+
+  els.returnBtn.addEventListener('click', function () {
+    clearError();
+    var refundType = document.querySelector('input[name="refund-type"]:checked').value;
+    google.script.run
+      .withSuccessHandler(function (result) {
+        els.returnMessage.textContent = result.success
+          ? (result.message + '. ' + result.refundMessage)
+          : result.message;
+        els.returnMessage.className = result.success ? 'success' : 'failure';
+        if (result.creditBalance !== undefined) {
+          els.storeCreditBalance.textContent = Number(result.creditBalance).toFixed(2);
+        }
+        els.returnBtn.disabled = !result.returnEnabled;
+      })
+      .withFailureHandler(showError)
+      .returnPhone(buildParams({ refundType: refundType }));
+  });
+
+  els.resetBtn.addEventListener('click', function () {
+    clearError();
+    if (!confirm('Reset all of your own purchase, discount code, and store credit data?')) return;
+    google.script.run
+      .withSuccessHandler(function () {
+        els.priceBreakdown.hidden = true;
+        els.generatedCode.textContent = '';
+        els.storeCreditBalance.textContent = '0.00';
+        els.returnMessage.textContent = '';
+        els.returnBtn.disabled = true;
+        els.purchaseHistoryList.innerHTML = '';
+        els.purchaseHistory.hidden = true;
+        everFullyConfigured = false;
+        invalidateCalculation();
+        alert('Your data has been reset.');
+      })
+      .withFailureHandler(showError)
+      .resetStudentData({ email: els.email.value.trim() });
+  });
+
+  var statusDebounce = null;
+  function refreshStudentStatus() {
+    clearTimeout(statusDebounce);
+    statusDebounce = setTimeout(function () {
+      var email = els.email.value.trim();
+      if (!EMAIL_RE.test(email)) return;
+      google.script.run
+        .withSuccessHandler(function (status) {
+          els.returnBtn.disabled = !status.returnEnabled;
+          if (UI_CONFIG.level >= 4) {
+            els.storeCreditBalance.textContent = Number(status.creditBalance).toFixed(2);
+          }
+        })
+        .withFailureHandler(function () { /* ignore — likely still typing an invalid email */ })
+        .getStudentStatus({ email: email });
+    }, 400);
+  }
+
+  Object.keys(els.selects).forEach(function (param) {
+    els.selects[param].addEventListener('change', invalidateCalculation);
+  });
+  els.discountCode.addEventListener('input', invalidateCalculation);
+  els.email.addEventListener('input', refreshStudentStatus);
+
+  populateSelects();
+  applyUiConfig();
+  updateBuyButtonState();
+</script>

@@ -1,0 +1,244 @@
+<style>
+  body { font-family: Arial, sans-serif; max-width: 640px; margin: 24px auto; color: #222; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; margin-top: 24px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  .field { margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; }
+  .checkbox-row label, .radio-row label { display: inline-block; font-weight: normal; margin-right: 16px; }
+  input[type="text"], input[type="password"], select {
+    width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 14px;
+    border: 1px solid #999; border-radius: 4px;
+  }
+  button { padding: 8px 16px; font-size: 14px; margin-right: 8px; cursor: pointer; margin-top: 8px; }
+  #settings-panel, #danger-zone, #password-panel { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-top: 16px; background: #fafafa; }
+  #danger-zone { border-color: #e0a0a0; background: #fff5f5; }
+  .msg { margin-top: 8px; font-weight: bold; }
+  .msg.success { color: #0a7a2f; }
+  .msg.error { color: #b00020; }
+  .bug-desc { font-size: 12px; color: #666; margin: 2px 0 8px; }
+  .refresh-group, .immediate-group {
+    border-radius: 6px; padding: 12px; margin-top: 16px; border: 1px solid;
+  }
+  .refresh-group { background: #fff8ec; border-color: #e8c468; }
+  .immediate-group { background: #eefaf0; border-color: #8fd9a8; }
+  .refresh-group h2, .immediate-group h2 { margin-top: 0; border-bottom: none; padding-bottom: 0; }
+  .group-note { font-size: 12px; color: #555; margin: 0 0 12px; }
+</style>
+
+<div id="app">
+  <h1>Phone Configurator Simulator — Teacher Console</h1>
+
+  <div id="password-panel">
+    <div class="field">
+      <label for="teacher-password">Teacher password</label>
+      <input type="password" id="teacher-password" autocomplete="off">
+    </div>
+    <button id="unlock-btn">Unlock</button>
+    <div id="unlock-msg" class="msg"></div>
+  </div>
+
+  <div id="settings-panel" hidden>
+
+    <div class="refresh-group">
+      <h2>🔄 Requires student page refresh</h2>
+      <p class="group-note">Students who already have the page open will not see these changes until they reload it.</p>
+
+      <div class="field">
+        <label for="level-select">Level</label>
+        <select id="level-select">
+          <option value="1">1 — Dropdowns + Total Price + Buy only</option>
+          <option value="2">2 — + Discount codes</option>
+          <option value="3">3 — + Purchase tracking, single-use codes</option>
+          <option value="4">4 — + Return, Refund / Store credit</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="domain-input">Required email domain (blank = any)</label>
+        <input type="text" id="domain-input" placeholder="e.g. post.jce.ac.il">
+      </div>
+
+      <div class="field checkbox-row">
+        <label><input type="checkbox" id="student-reset-checkbox"> Allow students to reset their own data</label>
+      </div>
+
+      <div class="field checkbox-row">
+        <label><input type="checkbox" id="partial-config-checkbox"> [Bug] Enable Buy for partial configuration</label>
+        <div class="bug-desc">Buy stays enabled after a field is blanked out following a full configuration; missing components price at $0.</div>
+      </div>
+    </div>
+
+    <div class="immediate-group">
+      <h2>⚡ Takes effect immediately</h2>
+      <p class="group-note">Applies on every student's very next Calculate Price / Buy / Return click — no refresh needed.</p>
+
+      <div class="field radio-row">
+        <label style="display:block">[Bug] Discount code acceptance:</label>
+        <label><input type="radio" name="discount-mode" value="normal"> Normal</label>
+        <label><input type="radio" name="discount-mode" value="acceptAny"> Accept any 7-char code</label>
+        <label><input type="radio" name="discount-mode" value="acceptNone"> Never accept any code</label>
+      </div>
+
+      <div class="field checkbox-row">
+        <label><input type="checkbox" id="return-stays-available-checkbox"> [Bug] Return stays available when empty</label>
+        <div class="bug-desc">Return button never goes back to disabled once a student has bought at least one phone, even after every purchase is returned.</div>
+      </div>
+
+      <div class="field checkbox-row">
+        <label><input type="checkbox" id="reuse-code-checkbox"> [Bug] Allow discount code reuse</label>
+        <div class="bug-desc">Default (off): a code becomes unusable once applied ("This code was already used"), and unusable again if the phone that generated it was returned ("Invalid code. The phone that got you this code was returned."). This bug disables both checks — codes stay valid indefinitely.</div>
+      </div>
+
+      <div class="field radio-row">
+        <label style="display:block">[Bug] Store credit basis on return:</label>
+        <label><input type="radio" name="credit-basis" value="paid"> Paid price (correct)</label>
+        <label><input type="radio" name="credit-basis" value="base"> Base price (bug — overpays when a discount was used)</label>
+      </div>
+    </div>
+
+    <button id="save-settings-btn">Save Settings</button>
+    <div id="save-msg" class="msg"></div>
+  </div>
+
+  <div id="danger-zone" hidden>
+    <h2>Reset Simulator Data</h2>
+    <p>Wipes <strong>all</strong> students' purchases, discount codes, store credit balances, and the action log. Cannot be undone.</p>
+    <button id="reset-all-btn">Reset simulator data</button>
+    <div id="reset-msg" class="msg"></div>
+  </div>
+
+  <div id="password-change-panel" hidden>
+    <h2>Change Teacher Password</h2>
+    <div class="field">
+      <label for="new-password-input">New password (min 4 characters)</label>
+      <input type="password" id="new-password-input" autocomplete="off">
+    </div>
+    <button id="change-password-btn">Change Password</button>
+    <div id="password-change-msg" class="msg"></div>
+  </div>
+</div>
+
+<script>
+  var password = null;
+
+  var els = {
+    passwordInput: document.getElementById('teacher-password'),
+    unlockBtn: document.getElementById('unlock-btn'),
+    unlockMsg: document.getElementById('unlock-msg'),
+    settingsPanel: document.getElementById('settings-panel'),
+    dangerZone: document.getElementById('danger-zone'),
+    passwordChangePanel: document.getElementById('password-change-panel'),
+    level: document.getElementById('level-select'),
+    domain: document.getElementById('domain-input'),
+    studentReset: document.getElementById('student-reset-checkbox'),
+    partialConfig: document.getElementById('partial-config-checkbox'),
+    returnStaysAvailable: document.getElementById('return-stays-available-checkbox'),
+    reuseCode: document.getElementById('reuse-code-checkbox'),
+    saveBtn: document.getElementById('save-settings-btn'),
+    saveMsg: document.getElementById('save-msg'),
+    resetAllBtn: document.getElementById('reset-all-btn'),
+    resetMsg: document.getElementById('reset-msg'),
+    newPasswordInput: document.getElementById('new-password-input'),
+    changePasswordBtn: document.getElementById('change-password-btn'),
+    passwordChangeMsg: document.getElementById('password-change-msg')
+  };
+
+  function showMsg(el, text, isError) {
+    el.textContent = text;
+    el.className = 'msg ' + (isError ? 'error' : 'success');
+  }
+
+  function populateForm(settings) {
+    els.level.value = String(settings.level);
+    els.domain.value = settings.requiredEmailDomain || '';
+    els.studentReset.checked = !!settings.studentResetEnabled;
+    document.querySelector('input[name="discount-mode"][value="' + settings.bugs.discountCodeMode + '"]').checked = true;
+    els.partialConfig.checked = !!settings.bugs.allowBuyWithPartialConfig;
+    els.returnStaysAvailable.checked = !!settings.bugs.returnStaysAvailableWhenEmpty;
+    els.reuseCode.checked = !!settings.bugs.allowDiscountCodeReuse;
+    document.querySelector('input[name="credit-basis"][value="' + settings.bugs.creditBasis + '"]').checked = true;
+  }
+
+  function readForm() {
+    return {
+      level: Number(els.level.value),
+      requiredEmailDomain: els.domain.value.trim(),
+      studentResetEnabled: els.studentReset.checked,
+      bugs: {
+        discountCodeMode: document.querySelector('input[name="discount-mode"]:checked').value,
+        allowBuyWithPartialConfig: els.partialConfig.checked,
+        returnStaysAvailableWhenEmpty: els.returnStaysAvailable.checked,
+        allowDiscountCodeReuse: els.reuseCode.checked,
+        creditBasis: document.querySelector('input[name="credit-basis"]:checked').value
+      }
+    };
+  }
+
+  function unlock() {
+    var pw = els.passwordInput.value;
+    google.script.run
+      .withSuccessHandler(function (settings) {
+        password = pw;
+        showMsg(els.unlockMsg, 'Unlocked.', false);
+        populateForm(settings);
+        els.settingsPanel.hidden = false;
+        els.dangerZone.hidden = false;
+        els.passwordChangePanel.hidden = false;
+      })
+      .withFailureHandler(function (err) {
+        showMsg(els.unlockMsg, err.message || String(err), true);
+      })
+      .teacherGetSettings(pw);
+  }
+
+  els.unlockBtn.addEventListener('click', unlock);
+  els.passwordInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      unlock();
+    }
+  });
+
+  els.saveBtn.addEventListener('click', function () {
+    google.script.run
+      .withSuccessHandler(function (settings) {
+        populateForm(settings);
+        showMsg(els.saveMsg, 'Settings saved.', false);
+      })
+      .withFailureHandler(function (err) {
+        showMsg(els.saveMsg, err.message || String(err), true);
+      })
+      .teacherUpdateSettings(password, readForm());
+  });
+
+  els.resetAllBtn.addEventListener('click', function () {
+    if (!confirm('This will permanently delete ALL students\' purchases, codes, and credit. Continue?')) return;
+    var typed = prompt('Type RESET to confirm:');
+    if (typed !== 'RESET') {
+      showMsg(els.resetMsg, 'Reset cancelled.', true);
+      return;
+    }
+    google.script.run
+      .withSuccessHandler(function () {
+        showMsg(els.resetMsg, 'All simulator data has been reset.', false);
+      })
+      .withFailureHandler(function (err) {
+        showMsg(els.resetMsg, err.message || String(err), true);
+      })
+      .teacherResetAll(password);
+  });
+
+  els.changePasswordBtn.addEventListener('click', function () {
+    var newPw = els.newPasswordInput.value;
+    google.script.run
+      .withSuccessHandler(function () {
+        password = newPw;
+        els.newPasswordInput.value = '';
+        showMsg(els.passwordChangeMsg, 'Password changed.', false);
+      })
+      .withFailureHandler(function (err) {
+        showMsg(els.passwordChangeMsg, err.message || String(err), true);
+      })
+      .changeTeacherPassword(password, newPw);
+  });
+</script>

@@ -1,0 +1,32 @@
+Script file name: 
+
+Deployment ID: 
+AKfycbyb9Fyf079yquXQ8zUZ8fTTp8NJwVt4US7mbj27vpCMzW_CCDuL71KVHPP-kAjI-m6E
+
+Web app URL:
+https://script.google.com/macros/s/AKfycbyb9Fyf079yquXQ8zUZ8fTTp8NJwVt4US7mbj27vpCMzW_CCDuL71KVHPP-kAjI-m6E/exec
+
+Teacher's:
+https://script.google.com/macros/s/AKfycbyb9Fyf079yquXQ8zUZ8fTTp8NJwVt4US7mbj27vpCMzW_CCDuL71KVHPP-kAjI-m6E/exec?role=teacher
+
+
+Teacher entry code: test11Now
+
+how to reset the entry code: 
+Open the Apps Script editor.
+Click the gear icon (Project Settings) in the left sidebar.
+Scroll down to the Script Properties section.
+Find the row with key TEACHER_PASSWORD.
+Either:
+Edit its value directly to a new password, or
+Delete that row entirely — with it gone, the app falls back to the built-in default teacher123 (from DEFAULT_TEACHER_PASSWORD in Code.js).
+Save.
+
+
+===========
+
+Possible additional changes / bugs / features:
+
+- Allow using discount code of other students (can be seen as a bug - I can guess and steal - or as a feature: my friend can give me the code)
+- Enable/disable discount codes when buying discounted phone
+- Bug: Buying the same phone twice, each time with a new discount code, applies the code on the discounted price
