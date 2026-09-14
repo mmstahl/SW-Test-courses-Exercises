@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone Configurator Simulator</title>
+<style>
+  body { font-family: Arial, sans-serif; max-width: 560px; margin: 24px auto; color: #222; }
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; margin-top: 28px; }
+  .field { margin-bottom: 12px; }
+  label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; }
+  input[type="email"], input[type="text"], select {
+    width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 14px;
+    border: 1px solid #999; border-radius: 4px;
+  }
+  .actions { margin: 16px 0; }
+  button { padding: 8px 16px; font-size: 14px; margin-right: 8px; cursor: pointer; }
+  button:disabled { cursor: not-allowed; opacity: 0.5; }
+  #price-breakdown, #store-credit-wrap, #return-section, #reset-wrap, #purchase-history {
+    border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-top: 12px; background: #fafafa;
+  }
+  #price-breakdown div { margin: 4px 0; }
+  #purchase-history { max-height: 220px; overflow-y: auto; }
+  #purchase-history h2 { margin: 0 0 8px; font-size: 14px; }
+  #purchase-history-list { margin: 0; padding-left: 20px; }
+  #purchase-history-list li { margin: 4px 0; }
+  .error { color: #b00020; margin-top: 12px; font-weight: bold; }
+  .status-unknown { color: #b00020; font-weight: bold; margin-left: 8px; }
+  .status-valid { color: #0a7a2f; font-weight: bold; margin-left: 8px; }
+  #return-message.success { color: #0a7a2f; }
+  #return-message.failure { color: #b00020; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <h1>Phone Configurator Simulator</h1>
+
+  <div class="field">
+    <label for="student-email">Email</label>
+    <input type="email" id="student-email" maxlength="100" placeholder="you@example.com" autocomplete="off">
+  </div>
+
+  <div class="field">
+    <label for="model-select">Model</label>
+    <select id="model-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="storage-select">Storage</label>
+    <select id="storage-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="color-select">Color</label>
+    <select id="color-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="network-select">Network</label>
+    <select id="network-select"><option value="">-- select --</option></select>
+  </div>
+  <div class="field">
+    <label for="accessory-select">Accessory</label>
+    <select id="accessory-select"><option value="">-- select --</option></select>
+  </div>
+
+  <div class="field" id="discount-field-wrap" hidden>
+    <label for="discount-code">Discount code</label>
+    <input type="text" id="discount-code" maxlength="7" autocomplete="off">
+    <span id="discount-status"></span>
+  </div>
+
+  <div class="actions">
+    <button id="calc-price-btn">Calculate Price</button>
+    <button id="buy-btn" disabled>Buy</button>
+  </div>
+
+  <div id="price-breakdown" hidden>
+    <div id="total-price-row">Total Price: $<span id="total-price">0.00</span></div>
+    <div id="phone-price-row" hidden>Phone price: $<span id="phone-price">0.00</span></div>
+    <div id="applied-credit-row" hidden>Applied credit: $<span id="applied-credit">0.00</span></div>
+    <div id="requested-payment-row" hidden>Requested payment: $<span id="requested-payment">0.00</span></div>
+    <div id="generated-code-row" hidden>New discount code: <span id="generated-code"></span></div>
+    <div id="no-code-row" hidden>No discount codes for discounted purchases</div>
+  </div>
+
+  <div id="store-credit-wrap" hidden>
+    Store credit: $<span id="store-credit-balance">0.00</span>
+  </div>
+
+  <div id="purchase-history" hidden>
+    <h2>Your Purchases</h2>
+    <ul id="purchase-history-list"></ul>
+  </div>
+
+  <div id="return-section" hidden>
+    <h2>Return</h2>
+    <label><input type="radio" name="refund-type" value="Refund" checked> Refund</label>
+    <label><input type="radio" name="refund-type" value="StoreCredit"> Store credit</label>
+    <div class="actions">
+      <button id="return-btn" disabled>Return</button>
+    </div>
+    <div id="return-message"></div>
+  </div>
+
+  <div id="reset-wrap" hidden>
+    <button id="reset-btn">Reset my data</button>
+  </div>
+
+  <div id="error-message" class="error" hidden></div>
+</div>
+
+<script src="js/student.js"></script>
+</body>
+</html>
