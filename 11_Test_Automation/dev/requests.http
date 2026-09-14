@@ -1,5 +1,5 @@
 ### Phone Configurator Simulator — "under the UI" HTTP examples
-### Use with the VS Code "REST Client" extension (Huy Nguyen), or copy the
+### Use with the VS Code "REST Client" extension (Huachao Mao), or copy the
 ### equivalent curl commands shown in each comment.
 ###
 ### Replace @baseUrl with your deployment's /exec URL, e.g.:
@@ -8,8 +8,8 @@
 ### Every response is JSON: { "ok": true, "data": {...} } on success,
 ### or { "ok": false, "error": "..." } on failure.
 
-@baseUrl = https://script.google.com/macros/s/REPLACE_WITH_YOUR_DEPLOYMENT_ID/exec
-@email = student01@example.com
+@baseUrl = https://script.google.com/macros/s/AKfycbyb9Fyf079yquXQ8zUZ8fTTp8NJwVt4US7mbj27vpCMzW_CCDuL71KVHPP-kAjI-m6E/exec
+@email = student01@post.jce.ac.il
 
 ### Get current UI config (level, requiredEmailDomain, studentResetEnabled,
 ### and allowBuyWithPartialConfig — the one bug flag exposed to the client)
@@ -122,54 +122,9 @@ Content-Type: application/json
   "email": "{{email}}"
 }
 
-### ---- Teacher actions (require the teacher password) ----
-
-@teacherPassword = teacher123
-
-### Read current settings
-GET {{baseUrl}}?action=teacherGetSettings&password={{teacherPassword}}
-
-### Update settings (full object; unspecified fields are merged over current settings)
-POST {{baseUrl}}
-Content-Type: application/json
-
-{
-  "action": "teacherUpdateSettings",
-  "password": "{{teacherPassword}}",
-  "settings": {
-    "level": 4,
-    "requiredEmailDomain": "",
-    "studentResetEnabled": true,
-    "bugs": {
-      "discountCodeMode": "normal",
-      "allowBuyWithPartialConfig": false,
-      "returnStaysAvailableWhenEmpty": false,
-      "creditBasis": "paid",
-      "allowDiscountCodeReuse": false
-    }
-  }
-}
-
-### Toggle on "allow discount code reuse" only (partial update — merges
-### over whatever else is currently set)
-POST {{baseUrl}}
-Content-Type: application/json
-
-{
-  "action": "teacherUpdateSettings",
-  "password": "{{teacherPassword}}",
-  "settings": {
-    "bugs": {
-      "allowDiscountCodeReuse": true
-    }
-  }
-}
-
-### Wipe all simulator data (Purchases, DiscountCodes, StoreCredit, ActionLog)
-POST {{baseUrl}}
-Content-Type: application/json
-
-{
-  "action": "teacherResetAll",
-  "password": "{{teacherPassword}}"
-}
+### ---- Teacher actions are NOT part of this API ----
+### teacherGetSettings / teacherUpdateSettings / teacherResetAll are gated by
+### Session.getActiveUser() against the "Teachers" sheet allowlist, the same
+### mechanism as the 10_Combinatorial_testing reference app. A bare HTTP
+### request has no signed-in browser session to carry, so these are only
+### ever reachable by loading teacher.html itself as an allowlisted teacher.

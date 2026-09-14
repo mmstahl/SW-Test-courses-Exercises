@@ -11,10 +11,14 @@
  *
  * Deployment: Execute as "Me", Access "Anyone" (fully anonymous) — students
  * never sign in to Google; identity is a self-reported email parameter.
- * Because of that, Session.getActiveUser() cannot reliably identify anyone
- * (Apps Script blanks it out under anonymous access), so the teacher page is
- * instead protected by a shared password (see TEACHER_PASSWORD_KEY below).
- * Change the default password from teacher.html the first time you use it.
+ *
+ * Teacher auth mirrors the reference app (10_Combinatorial_testing) exactly:
+ * a "Teachers" sheet allowlist, checked via Session.getActiveUser().getEmail()
+ * in isAuthorizedTeacher_(). doGet only serves teacher.html when ?role=teacher
+ * AND that check passes; anything else — wrong/no identity, or role missing —
+ * falls through to the ordinary student page, silently (no hint a teacher mode
+ * exists). requireTeacher_() re-checks the same thing inside every settings-
+ * changing function, independent of how the page was reached.
  */
 
 // ===== Product data =====
@@ -53,8 +57,10 @@ var DEFAULT_SETTINGS = {
 };
 
 // ===== Teacher auth =====
-var TEACHER_PASSWORD_KEY = 'TEACHER_PASSWORD';
-var DEFAULT_TEACHER_PASSWORD = 'teacher123';
+var SHEET_TEACHERS = 'Teachers';
+
+// ===== Perf: skip re-checking sheet existence on every single call =====
+var SHEETS_READY_KEY = 'SHEETS_READY';
 
 // ===================================================================
 // Web app entry points
@@ -68,12 +74,16 @@ function doGet(e) {
     return jsonResponse_(handleApiAction_(p, 'GET'));
   }
 
-  if (p.role === 'teacher') {
+  if (p.role === 'teacher' && isAuthorizedTeacher_()) {
     return HtmlService.createHtmlOutputFromFile('teacher')
       .setTitle('Phone Simulator — Teacher')
       .addMetaTag('viewport', 'width=device-width, initial-scale=1');
   }
 
+  // Anyone requesting the teacher page without being on the Teachers
+  // allowlist — or not requesting it at all — transparently gets the
+  // ordinary student page instead. No error, no hint a teacher mode
+  // exists, mirroring the reference app's own §7.2 approach exactly.
   var tmpl = HtmlService.createTemplateFromFile('student');
   tmpl.optionsJson = JSON.stringify(getProductOptions());
   tmpl.uiConfigJson = JSON.stringify(getUiConfig());
@@ -104,20 +114,24 @@ function doPost(e) {
 }
 
 /**
- * "Under the UI" JSON API. All actions below mirror a UI action 1:1.
+ * "Under the UI" JSON API — student-facing actions only. All of them mirror
+ * a UI action 1:1.
  *
  * Read-only (GET or POST):
  *   ?action=getUiConfig
  *   ?action=calculate&email=...&model=...&storage=...&color=...&network=...&accessory=...&discountCode=...
  *   ?action=getStudentStatus&email=...
- *   ?action=teacherGetSettings&password=...
  *
  * Mutating (POST only):
  *   action=buy            {email, model, storage, color, network, accessory, discountCode}
  *   action=return          {email, model, storage, color, network, accessory, refundType: "Refund"|"StoreCredit"}
  *   action=resetStudent    {email}
- *   action=teacherUpdateSettings  {password, settings: {...}}
- *   action=teacherResetAll {password}
+ *
+ * Teacher actions (teacherGetSettings/teacherUpdateSettings/teacherResetAll)
+ * are deliberately NOT exposed here — they're identity-gated via
+ * Session.getActiveUser() (see isAuthorizedTeacher_()), which a bare HTTP
+ * call has no way to carry, so they're only ever reachable through
+ * teacher.html itself.
  */
 function handleApiAction_(params, method) {
   var action = params.action;
@@ -138,14 +152,6 @@ function handleApiAction_(params, method) {
       case 'resetStudent':
         requireMethod_(method, 'POST');
         return { ok: true, data: resetStudentData(params) };
-      case 'teacherGetSettings':
-        return { ok: true, data: teacherGetSettings(params.password) };
-      case 'teacherUpdateSettings':
-        requireMethod_(method, 'POST');
-        return { ok: true, data: teacherUpdateSettings(params.password, params.settings) };
-      case 'teacherResetAll':
-        requireMethod_(method, 'POST');
-        return { ok: true, data: teacherResetAll(params.password) };
       default:
         return { ok: false, error: 'Unknown or missing action: ' + action };
     }
@@ -309,7 +315,11 @@ function buyPhone(params) {
     var discount = evaluateDiscount_(email, params.discountCode, settings);
     var paidPrice = round2_(discount.valid ? basePrice * (1 - DISCOUNT_RATE) : basePrice);
 
-    var creditBalanceBefore = getStoreCredit_(email);
+    // Only read StoreCredit (a full sheet fetch) when it's actually used --
+    // this was previously unconditional, costing every Level 1-3 Buy a
+    // sheet read for a value that would just be discarded (calculatePrice
+    // already got this right; buyPhone didn't).
+    var creditBalanceBefore = settings.level >= 4 ? getStoreCredit_(email) : 0;
     logEntry.creditBefore = creditBalanceBefore;
     var creditApplied = 0;
     var requestedPayment = paidPrice;
@@ -494,17 +504,17 @@ function resetStudentData(params) {
 }
 
 // ===================================================================
-// Teacher functions (password-protected — see file header)
+// Teacher functions (identity-protected — see file header)
 // ===================================================================
 
-function teacherGetSettings(password) {
-  requireTeacherPassword_(password);
+function teacherGetSettings() {
+  requireTeacher_();
   ensureSheets_();
   return getSettings_();
 }
 
-function teacherUpdateSettings(password, newSettings) {
-  requireTeacherPassword_(password);
+function teacherUpdateSettings(newSettings) {
+  requireTeacher_();
   if (typeof newSettings === 'string') {
     newSettings = JSON.parse(newSettings);
   }
@@ -514,8 +524,8 @@ function teacherUpdateSettings(password, newSettings) {
   return merged;
 }
 
-function teacherResetAll(password) {
-  requireTeacherPassword_(password);
+function teacherResetAll() {
+  requireTeacher_();
   ensureSheets_();
   var lock = LockService.getScriptLock();
   lock.waitLock(10000);
@@ -530,20 +540,34 @@ function teacherResetAll(password) {
   }
 }
 
-function changeTeacherPassword(oldPassword, newPassword) {
-  requireTeacherPassword_(oldPassword);
-  newPassword = (newPassword || '').toString();
-  if (newPassword.length < 4) {
-    throw new Error('New password must be at least 4 characters.');
+/**
+ * The teacher allowlist: every email in column A (any header text; row 1
+ * is always skipped) of the "Teachers" sheet, lower-cased and trimmed.
+ * Mirrors the reference app's getTeacherAllowlist_() exactly.
+ */
+function getTeacherAllowlist_() {
+  var sheet = getSheet_(SHEET_TEACHERS);
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  var emails = [];
+  for (var i = 1; i < data.length; i++) {
+    var val = data[i][0];
+    if (val !== '' && val !== null && val !== undefined) {
+      emails.push(val.toString().trim().toLowerCase());
+    }
   }
-  PropertiesService.getScriptProperties().setProperty(TEACHER_PASSWORD_KEY, newPassword);
-  return { success: true };
+  return emails;
 }
 
-function requireTeacherPassword_(password) {
-  var stored = PropertiesService.getScriptProperties().getProperty(TEACHER_PASSWORD_KEY) || DEFAULT_TEACHER_PASSWORD;
-  if (!password || password !== stored) {
-    throw new Error('Invalid teacher password.');
+function isAuthorizedTeacher_() {
+  var activeEmail = Session.getActiveUser().getEmail();
+  if (!activeEmail) return false;
+  return getTeacherAllowlist_().indexOf(activeEmail.toString().trim().toLowerCase()) !== -1;
+}
+
+function requireTeacher_() {
+  if (!isAuthorizedTeacher_()) {
+    throw new Error('You are not authorized to perform this action.');
   }
 }
 
@@ -698,12 +722,26 @@ function round2_(x) {
 // Sheet access
 // ===================================================================
 
+/**
+ * Creates the 4 data sheets if missing -- but only actually checks once.
+ * getSheetByName() is a real, measurable cost paid on every single call
+ * (Calculate, Buy, Return, ...); after the first-ever run these sheets
+ * always exist, so a Script Properties flag skips the 4 existence checks
+ * on every subsequent call. If a sheet is ever manually deleted afterward,
+ * clear the "SHEETS_READY" Script Property (Project Settings -> Script
+ * Properties) to force this to re-check and recreate it.
+ */
 function ensureSheets_() {
+  var props = PropertiesService.getScriptProperties();
+  if (props.getProperty(SHEETS_READY_KEY) === 'true') return;
+
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   ensureSheet_(ss, SHEET_PURCHASES, ['PurchaseID', 'StudentEmail', 'PurchaseSeq', 'Model', 'Storage', 'Color', 'Network', 'Accessory', 'BasePrice', 'DiscountCodeUsed', 'PaidPrice', 'CreditApplied', 'RequestedPayment', 'CodeGenerated', 'Status', 'Timestamp']);
   ensureSheet_(ss, SHEET_CODES, ['Code', 'StudentEmail', 'GeneratedByPurchaseID', 'Status', 'CreatedAt']);
   ensureSheet_(ss, SHEET_CREDIT, ['StudentEmail', 'Balance']);
   ensureSheet_(ss, SHEET_LOG, ['Timestamp', 'StudentEmail', 'Action', 'Parameters', 'DiscountCode', 'CalculatedPrice', 'CreditBefore', 'CreditAfter', 'Result', 'Message']);
+
+  props.setProperty(SHEETS_READY_KEY, 'true');
 }
 
 function ensureSheet_(ss, name, headers) {

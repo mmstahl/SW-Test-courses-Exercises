@@ -5,12 +5,12 @@
   .field { margin-bottom: 12px; }
   label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; }
   .checkbox-row label, .radio-row label { display: inline-block; font-weight: normal; margin-right: 16px; }
-  input[type="text"], input[type="password"], select {
+  input[type="text"], select {
     width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 14px;
     border: 1px solid #999; border-radius: 4px;
   }
   button { padding: 8px 16px; font-size: 14px; margin-right: 8px; cursor: pointer; margin-top: 8px; }
-  #settings-panel, #danger-zone, #password-panel { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-top: 16px; background: #fafafa; }
+  #settings-panel, #danger-zone { border: 1px solid #ddd; border-radius: 6px; padding: 12px; margin-top: 16px; background: #fafafa; }
   #danger-zone { border-color: #e0a0a0; background: #fff5f5; }
   .msg { margin-top: 8px; font-weight: bold; }
   .msg.success { color: #0a7a2f; }
@@ -28,14 +28,7 @@
 <div id="app">
   <h1>Phone Configurator Simulator — Teacher Console</h1>
 
-  <div id="password-panel">
-    <div class="field">
-      <label for="teacher-password">Teacher password</label>
-      <input type="password" id="teacher-password" autocomplete="off">
-    </div>
-    <button id="unlock-btn">Unlock</button>
-    <div id="unlock-msg" class="msg"></div>
-  </div>
+  <div id="load-msg" class="msg"></div>
 
   <div id="settings-panel" hidden>
 
@@ -107,27 +100,13 @@
     <div id="reset-msg" class="msg"></div>
   </div>
 
-  <div id="password-change-panel" hidden>
-    <h2>Change Teacher Password</h2>
-    <div class="field">
-      <label for="new-password-input">New password (min 4 characters)</label>
-      <input type="password" id="new-password-input" autocomplete="off">
-    </div>
-    <button id="change-password-btn">Change Password</button>
-    <div id="password-change-msg" class="msg"></div>
-  </div>
 </div>
 
 <script>
-  var password = null;
-
   var els = {
-    passwordInput: document.getElementById('teacher-password'),
-    unlockBtn: document.getElementById('unlock-btn'),
-    unlockMsg: document.getElementById('unlock-msg'),
+    loadMsg: document.getElementById('load-msg'),
     settingsPanel: document.getElementById('settings-panel'),
     dangerZone: document.getElementById('danger-zone'),
-    passwordChangePanel: document.getElementById('password-change-panel'),
     level: document.getElementById('level-select'),
     domain: document.getElementById('domain-input'),
     studentReset: document.getElementById('student-reset-checkbox'),
@@ -137,10 +116,7 @@
     saveBtn: document.getElementById('save-settings-btn'),
     saveMsg: document.getElementById('save-msg'),
     resetAllBtn: document.getElementById('reset-all-btn'),
-    resetMsg: document.getElementById('reset-msg'),
-    newPasswordInput: document.getElementById('new-password-input'),
-    changePasswordBtn: document.getElementById('change-password-btn'),
-    passwordChangeMsg: document.getElementById('password-change-msg')
+    resetMsg: document.getElementById('reset-msg')
   };
 
   function showMsg(el, text, isError) {
@@ -174,30 +150,19 @@
     };
   }
 
-  function unlock() {
-    var pw = els.passwordInput.value;
-    google.script.run
-      .withSuccessHandler(function (settings) {
-        password = pw;
-        showMsg(els.unlockMsg, 'Unlocked.', false);
-        populateForm(settings);
-        els.settingsPanel.hidden = false;
-        els.dangerZone.hidden = false;
-        els.passwordChangePanel.hidden = false;
-      })
-      .withFailureHandler(function (err) {
-        showMsg(els.unlockMsg, err.message || String(err), true);
-      })
-      .teacherGetSettings(pw);
-  }
-
-  els.unlockBtn.addEventListener('click', unlock);
-  els.passwordInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      unlock();
-    }
-  });
+  // Reaching this page at all already required passing the Teachers-sheet
+  // allowlist check inside doGet (Session.getActiveUser(), same mechanism
+  // as the reference app) — no separate client-side unlock step needed.
+  google.script.run
+    .withSuccessHandler(function (settings) {
+      populateForm(settings);
+      els.settingsPanel.hidden = false;
+      els.dangerZone.hidden = false;
+    })
+    .withFailureHandler(function (err) {
+      showMsg(els.loadMsg, err.message || String(err), true);
+    })
+    .teacherGetSettings();
 
   els.saveBtn.addEventListener('click', function () {
     google.script.run
@@ -208,7 +173,7 @@
       .withFailureHandler(function (err) {
         showMsg(els.saveMsg, err.message || String(err), true);
       })
-      .teacherUpdateSettings(password, readForm());
+      .teacherUpdateSettings(readForm());
   });
 
   els.resetAllBtn.addEventListener('click', function () {
@@ -225,20 +190,6 @@
       .withFailureHandler(function (err) {
         showMsg(els.resetMsg, err.message || String(err), true);
       })
-      .teacherResetAll(password);
-  });
-
-  els.changePasswordBtn.addEventListener('click', function () {
-    var newPw = els.newPasswordInput.value;
-    google.script.run
-      .withSuccessHandler(function () {
-        password = newPw;
-        els.newPasswordInput.value = '';
-        showMsg(els.passwordChangeMsg, 'Password changed.', false);
-      })
-      .withFailureHandler(function (err) {
-        showMsg(els.passwordChangeMsg, err.message || String(err), true);
-      })
-      .changeTeacherPassword(password, newPw);
+      .teacherResetAll();
   });
 </script>
