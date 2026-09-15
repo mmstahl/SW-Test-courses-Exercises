@@ -5,7 +5,6 @@
   "description": "Phone Configurator Simulator test-automation exercise, ported to Vercel + Postgres.",
   "type": "commonjs",
   "scripts": {
-    "dev": "vercel dev",
     "db:migrate": "node db/migrate.js",
     "db:seed-teacher": "node db/seed-teacher.js"
   },
@@ -14,6 +13,6 @@
     "pg": "^8.23.0"
   },
   "devDependencies": {
-    "vercel": "^37.0.0"
+    "vercel": "^59.17.0"
   }
 }

@@ -46,13 +46,27 @@ instead.
 6. **Run locally:**
 
    ```bash
-   npm run dev
+   npx vercel dev
    ```
 
-   This starts `vercel dev`, serving the static pages from `public/` and
-   the API functions from `api/`. Visit `http://localhost:3000` for the
-   student page and `http://localhost:3000/teacher.html` for the teacher
-   console.
+   Run this directly (not via an `npm run dev` script) — `vercel dev` is
+   itself the dev server, and Vercel's dashboard often auto-populates a
+   project's **Development Command** setting to `npm run dev` on import;
+   if `package.json` also had a `dev` script that ran `vercel dev`, the
+   two would call each other forever ("recursive invocation of
+   commands"). If you ever hit that error, check Project Settings →
+   Build and Deployment → Development Command in the Vercel dashboard and
+   make sure it isn't overridden to something that loops back here.
+
+   Also make sure **Settings → Build and Deployment → Root Directory** is
+   set to `11_Test_Automation/dev` — `vercel dev` resolves the project
+   root from this setting (relative to the Git repo root), not from
+   wherever your shell happens to be sitting, so a stale value here
+   causes `vercel dev` to fail looking for a folder that doesn't exist.
+
+   This serves the static pages from `public/` and the API functions from
+   `api/`. Visit `http://localhost:3000` for the student page and
+   `http://localhost:3000/teacher.html` for the teacher console.
 
 ## Deploying
 
@@ -93,7 +107,7 @@ collaborator touching the code):
 | 3. `.env.local` | Yes, but use the *existing* `DATABASE_URL` (copy it over securely — a password manager, not Slack/email in plaintext). `SESSION_SECRET` can be freshly generated per machine; it only needs to be internally consistent with what's running locally, and doesn't need to match Vercel's. |
 | 4. `npm run db:migrate` | **Skip** — schema's already applied. Harmless to re-run if unsure (every statement is idempotent), just not necessary. |
 | 5. Seed a teacher | Only if *that person* needs their own login; otherwise skip. |
-| 6. `npm run dev` | Yes, to actually run/test locally. |
+| 6. `npx vercel dev` | Yes, to actually run/test locally. |
 
 ## Project layout
 
