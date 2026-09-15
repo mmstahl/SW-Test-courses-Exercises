@@ -1,25 +1,33 @@
 """
-Level 1 "under the UI" verification: Calculate Price, then Buy.
+Level 1 "under the UI" verification: Calculate Price, then Buy -- against
+the new Vercel + Postgres deployment instead of the old Apps Script one.
 
-Exercises the same two calls as the curl examples given earlier in this
-project (email + 5 parameters -> Calculate -> Buy), and independently
-recomputes the expected price rather than trusting the server's own number.
+Mirrors ../dev/test_level1_buy.py's structure and intent (same two calls,
+independently recomputed price, same "message is reconstructed, not
+server-returned" caveat) but reflects what's actually different in the new
+API:
 
-NOTE on the "message" check: buyPhone's JSON response has no message field
-at all -- the "Congratulations..." text is built entirely client-side, in
-student.html's buildCongratsMessage(), never sent by the server. So this
-script cannot literally compare a "returned message" against anything.
-What it verifies instead: the `config` the server echoes back in its Buy
-response matches what was actually requested (the data the message would be
-built from) -- and separately reconstructs, using the exact same logic as
-student.html, what the congrats message would say, purely so you can see it.
-That reconstruction is not a server contract; if you want the message text
-itself to be a testable API field, that needs a small server-side change.
+* No {"ok": ..., "data"/"error": ...} envelope. A call either returns its
+  data directly with HTTP 200, or {"error": "..."} with 400/401/500 -- this
+  script checks the HTTP status code, not an "ok" field.
+* Calculate is GET /api/calculate (query params); Buy is POST /api/buy
+  (JSON body) -- one endpoint per action, no ?action=X dispatch and no
+  dual GET/POST support on the same URL.
+* No redirect dance. The old buy_phone() had to POST, then separately GET
+  the redirect Location Apps Script's /exec sent back. That hop -- and its
+  2-58s latency variance -- was the actual reason for this migration (see
+  MIGRATION_BRIEF.md); here a single requests.post() is the whole call.
+* No retry-for-flakiness wrapper around Calculate. The old version's
+  call_with_retries() existed specifically because Apps Script's /exec
+  redirect was empirically flaky, confirmed to be Google's infrastructure
+  and not this app's own logic. Plain HTTP to Vercel doesn't have that
+  problem, so there's nothing to retry around.
 
-calculate_price() shells out to the actual curl command rather than using
-the requests library, so the command being run "under the UI" is literal
-and visible, not hidden behind a Python HTTP client. buy_phone() still uses
-requests directly.
+calculate_price() still shells out to the actual curl command (not the
+requests library) so the literal "under the UI" command is visible, not
+hidden behind a Python HTTP client -- same reasoning as the original.
+buy_phone() uses requests directly, same as the original (Buy is a
+mutating action, so it's POST there too -- that didn't change).
 
 Requires: pip install requests, and curl available on PATH.
 """
@@ -32,8 +40,8 @@ import urllib.parse
 
 import requests
 
-BASE_URL = "https://script.google.com/macros/s/AKfycbyb9Fyf079yquXQ8zUZ8fTTp8NJwVt4US7mbj27vpCMzW_CCDuL71KVHPP-kAjI-m6E/exec"
-EMAIL = "student01@post.jce.ac.il"
+BASE_URL = "https://sw-test-courses-exercises.vercel.app"
+EMAIL = "student01@example.com"
 
 CONFIG = {
     "model": "Pixel 9",
@@ -43,9 +51,9 @@ CONFIG = {
     "accessory": "None",
 }
 
-# Mirrors PRICE_TABLE in Code.js exactly -- must be kept in sync by hand if
-# that table ever changes, since this is deliberately an independent
-# recomputation, not a copy fetched from the server.
+# Mirrors PRICE_TABLE in lib/priceTable.js exactly -- must be kept in sync
+# by hand if that table ever changes, since this is deliberately an
+# independent recomputation, not a copy fetched from the server.
 PRICE_TABLE = {
     "model": {"Pixel 9": 900, "Pixel 9 Pro": 1050, "Pixel 9 Pro XL": 1430},
     "storage": {"128GB": 0, "256GB": 56, "512GB": 98, "1TB": 164},
@@ -56,9 +64,9 @@ PRICE_TABLE = {
 
 
 def expected_price(config: dict) -> float:
-    """Independently computes the base price, the same way Code.js's
-    computeBasePrice_() does: sum each parameter's price, 0 for anything
-    missing or not in the table."""
+    """Independently computes the base price, the same way
+    lib/pricing.js's computeBasePrice() does: sum each parameter's price,
+    0 for anything missing or not in the table."""
     total = 0
     for param, value in config.items():
         total += PRICE_TABLE[param].get(value, 0)
@@ -66,8 +74,9 @@ def expected_price(config: dict) -> float:
 
 
 def expected_congrats_message(config: dict) -> str:
-    """Reconstructs the message student.html's buildCongratsMessage() would
-    show -- NOT something the server returns. See module docstring."""
+    """Reconstructs the message public/js/student.js's
+    buildCongratsMessage() would show -- NOT something the server
+    returns; the congrats text is still built entirely client-side."""
     msg = (
         f"Congratulations! You are now the owner of a {config['network']} "
         f"{config['color']} {config['model']} with {config['storage']}"
@@ -80,27 +89,22 @@ def expected_congrats_message(config: dict) -> str:
     return msg
 
 
-def calculate_price(email: str, config: dict) -> dict:
-    """Same call as before, but run via the actual `curl` command (through
-    subprocess) instead of the requests library, so the exact command being
-    executed is visible rather than hidden behind a Python HTTP client.
-    Returns the full {"ok": ..., "data"/"error": ...} envelope -- the caller
-    decides how to treat ok:false, rather than this raising and hiding that
-    as a Python exception instead of a checkable result.
-    
-    example curl command (run on CMD shell):
-    curl -sL https://script.google.com/macros/s/AKfycbyb9Fyf079yquXQ8zUZ8fTTp8NJwVt4US7mbj27vpCMzW_CCDuL71KVHPP-kAjI-m6E/exec?action=calculate&email=student01%40post.jce.ac.il&model=Pixel+9&storage=128GB&color=Black&network=5G&accessory=None
+def calculate_price(email: str, config: dict):
+    """GET /api/calculate via the actual `curl` command (through
+    subprocess) instead of the requests library, so the exact command
+    being executed is visible rather than hidden behind a Python HTTP
+    client. Returns (http_status, parsed_json_body).
 
-    returns (on cmd shell):
-    {"ok":true,"data":{"email":"student01@post.jce.ac.il","config":{"Model":"Pixel 9","Storage":"128GB","Color":"Black","Network":"5G","Accessory":"None"},"basePrice":1015,"discountCode":{"entered":"","valid":false,"message":null},"paidPrice":1015}}
+    example curl command (run on a shell):
+    curl -s -w "\\n%{http_code}" "https://sw-test-courses-exercises.vercel.app/api/calculate?email=student01%40example.com&model=Pixel+9&storage=128GB&color=Black&network=5G&accessory=None"
 
+    returns (body on its own line, HTTP status on the last line):
+    {"email":"student01@example.com","config":{"Model":"Pixel 9","Storage":"128GB","Color":"Black","Network":"5G","Accessory":"None"},"basePrice":1015,"discountCode":{"entered":"","valid":false,"message":null},"paidPrice":1015}
+    200
     """
-    query = urllib.parse.urlencode({"action": "calculate", "email": email, **config})
-    url = f"{BASE_URL}?{query}"
-    # -sL: Apps Script /exec URLs respond with a redirect to a
-    # script.googleusercontent.com URL that actually serves the JSON; without
-    # this, curl returns the (empty-bodied) redirect response instead.
-    command = ["curl", "-sL", url]
+    query = urllib.parse.urlencode({"email": email, **config})
+    url = f"{BASE_URL}/api/calculate?{query}"
+    command = ["curl", "-s", "-w", "\n%{http_code}", url]
     print(f"  $ {' '.join(command)}")
     # Deliberately NOT text=True: that makes subprocess decode curl's output
     # using the OS's default codepage (e.g. cp1255 on a Hebrew-locale
@@ -116,33 +120,30 @@ def calculate_price(email: str, config: dict) -> dict:
     except UnicodeDecodeError:
         stdout_text = result.stdout.decode("utf-8", errors="replace")
         print(f"  !! curl output was not valid UTF-8; decoded with replacement chars: {stdout_text[:500]!r}")
+    body_text, _, status_text = stdout_text.rpartition("\n")
     try:
-        return json.loads(stdout_text)
+        status_code = int(status_text)
+    except ValueError:
+        print(f"  !! Could not parse HTTP status from curl output: {status_text!r}")
+        raise
+    try:
+        return status_code, json.loads(body_text)
     except json.JSONDecodeError:
-        print(f"  !! Non-JSON output from curl. returncode={result.returncode}")
-        print(f"  !! stdout (first 500 chars): {stdout_text[:500]!r}")
-        print(f"  !! stderr (first 500 chars): {result.stderr.decode('utf-8', errors='replace')[:500]!r}")
+        print(f"  !! Non-JSON body from curl. status={status_code}")
+        print(f"  !! body (first 500 chars): {body_text[:500]!r}")
         raise
 
 
-def buy_phone(email: str, config: dict) -> dict:
-    """POST to /exec, then GET the redirect Location -- confirmed empirically
-    (not guessed): the POST already executed doPost() on the first hop; the
-    302's Location is a content-serving URL for the already-computed result,
-    which only accepts GET. No cookies or preserved-POST tricks needed."""
-    payload = {"action": "buy", "email": email, **config}
-    resp = requests.post(BASE_URL, json=payload, allow_redirects=False)
-    if resp.is_redirect and "Location" in resp.headers:
-        resp = requests.get(resp.headers["Location"])
-    resp.raise_for_status()
+def buy_phone(email: str, config: dict):
+    """POST /api/buy directly -- no redirect handling needed (that was
+    entirely an Apps Script /exec quirk; see MIGRATION_BRIEF.md). Returns
+    (http_status, parsed_json_body)."""
+    payload = {"email": email, **config}
+    resp = requests.post(f"{BASE_URL}/api/buy", json=payload)
     try:
-        return resp.json()
+        return resp.status_code, resp.json()
     except ValueError:
-        # Diagnostic, not a guess: show exactly what came back instead of
-        # letting a bare JSONDecodeError hide the actual cause.
         print(f"  !! Non-JSON response. status={resp.status_code}")
-        print(f"  !! final URL: {resp.url}")
-        print(f"  !! headers: {dict(resp.headers)}")
         print(f"  !! body (first 500 chars): {resp.text[:500]!r}")
         raise
 
@@ -153,28 +154,6 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
-def call_with_retries(fn, max_attempts: int = 3, backoff_seconds: float = 3.0):
-    """Retries transient failures against the Apps Script redirect/delivery
-    path -- observed empirically to be erratic for automated (non-browser)
-    traffic even though the underlying server-side code itself runs fast
-    (confirmed by comparing ActionLog timestamps to when Python actually
-    receives the response). This doesn't fix that -- it's Google's own
-    infrastructure, not something in this project's control -- but retrying
-    is both a reasonable mitigation and a realistic thing any real test
-    suite hitting this endpoint should do anyway."""
-    last_exc = None
-    for attempt in range(1, max_attempts + 1):
-        try:
-            return fn()
-        except Exception as exc:
-            last_exc = exc
-            if attempt < max_attempts:
-                print(f"  (attempt {attempt}/{max_attempts} failed: "
-                      f"{exc.__class__.__name__}: {exc}; retrying in {backoff_seconds:.0f}s)")
-                time.sleep(backoff_seconds)
-    raise last_exc
-
-
 def main() -> int:
     all_passed = True
     want_price = expected_price(CONFIG)
@@ -182,14 +161,13 @@ def main() -> int:
     # ---- 1) Calculate Price ----
     print("Calculating price...")
     t0 = time.perf_counter()
-    calc_body = call_with_retries(lambda: calculate_price(EMAIL, CONFIG))
+    calc_status, calc = calculate_price(EMAIL, CONFIG)
     calc_elapsed = time.perf_counter() - t0
     print(f"  ({calc_elapsed:.2f}s)")
-    if not check("Calculate: request succeeded (ok == true)", calc_body.get("ok") is True,
-                  f"server said: {calc_body.get('error')}"):
+    if not check("Calculate: request succeeded (HTTP 200)", calc_status == 200,
+                  f"status={calc_status}, server said: {calc.get('error')}"):
         print("\nSOME CHECKS FAILED")
         return 1
-    calc = calc_body["data"]
     print(f"  Server returned basePrice={calc['basePrice']}, paidPrice={calc['paidPrice']}")
     all_passed &= check(
         "Calculate: basePrice matches independently computed price",
@@ -203,21 +181,19 @@ def main() -> int:
     )
 
     # ---- 2) Buy ----
-    # Deliberately NOT retried, unlike Calculate: Buy is not idempotent (it
-    # records a purchase every call), and the evidence from ActionLog is
-    # that a slow/failed HTTP response often follows a purchase that
-    # already completed server-side -- retrying here risks creating a
-    # duplicate purchase for what looks, from here, like one failed attempt.
+    # Deliberately not retried: Buy is not idempotent (it records a
+    # purchase every call). Unlike the old Apps Script version, there's
+    # also no known infrastructure flakiness here to retry around in the
+    # first place.
     print("\nBuying...")
     t1 = time.perf_counter()
-    buy_body = buy_phone(EMAIL, CONFIG)
+    buy_status, bought = buy_phone(EMAIL, CONFIG)
     buy_elapsed = time.perf_counter() - t1
     print(f"  ({buy_elapsed:.2f}s)")
-    if not check("Buy: request succeeded (ok == true)", buy_body.get("ok") is True,
-                  f"server said: {buy_body.get('error')}"):
+    if not check("Buy: request succeeded (HTTP 200)", buy_status == 200,
+                  f"status={buy_status}, server said: {bought.get('error')}"):
         print("\nSOME CHECKS FAILED")
         return 1
-    bought = buy_body["data"]
     print(f"  Server returned basePrice={bought['basePrice']}, paidPrice={bought['paidPrice']}")
     all_passed &= check(
         "Buy: basePrice matches independently computed price",
