@@ -86,22 +86,34 @@ function parseCookies(req) {
   return out;
 }
 
-function buildSessionCookie(token) {
+// `secure` should be true only when the request actually arrived over
+// HTTPS (Vercel's production/preview URLs always do). Omitting `Secure`
+// for a plain-HTTP local dev server matters beyond just browsers: unlike
+// a browser -- which treats http://localhost as a secure context and
+// sends Secure cookies there anyway -- an HTTP client like Python's
+// `requests` follows the cookie spec strictly and will silently drop a
+// Secure cookie set over plain HTTP, breaking teacher login against any
+// local server that isn't itself serving HTTPS.
+function buildSessionCookie(token, secure) {
   const parts = [
     `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}`,
     'HttpOnly',
-    'Secure',
     'SameSite=Lax',
     'Path=/',
     `Max-Age=${SESSION_MAX_AGE_SECONDS}`,
   ];
+  if (secure) parts.splice(1, 0, 'Secure');
   return parts.join('; ');
 }
 
-function buildClearCookie() {
-  return [`${SESSION_COOKIE_NAME}=`, 'HttpOnly', 'Secure', 'SameSite=Lax', 'Path=/', 'Max-Age=0'].join(
-    '; '
-  );
+function isSecureRequest(req) {
+  return (req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
+}
+
+function buildClearCookie(secure) {
+  const parts = [`${SESSION_COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0'];
+  if (secure) parts.splice(1, 0, 'Secure');
+  return parts.join('; ');
 }
 
 // Throws AuthError (-> 401) if the request has no valid teacher session.
@@ -126,6 +138,7 @@ module.exports = {
   parseCookies,
   buildSessionCookie,
   buildClearCookie,
+  isSecureRequest,
   requireTeacher,
   verifyPassword,
 };

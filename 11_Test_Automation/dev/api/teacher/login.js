@@ -1,6 +1,6 @@
 const { wrapHandler, assertMethod, sendJson } = require('../../lib/http');
 const { getPool } = require('../../lib/db');
-const { verifyPassword, signSession, buildSessionCookie } = require('../../lib/auth');
+const { verifyPassword, signSession, buildSessionCookie, isSecureRequest } = require('../../lib/auth');
 const { AuthError, ValidationError } = require('../../lib/errors');
 
 module.exports = wrapHandler(async (req, res) => {
@@ -21,6 +21,6 @@ module.exports = wrapHandler(async (req, res) => {
   }
 
   const token = signSession(username);
-  res.setHeader('Set-Cookie', buildSessionCookie(token));
+  res.setHeader('Set-Cookie', buildSessionCookie(token, isSecureRequest(req)));
   sendJson(res, 200, { success: true, username });
 });
