@@ -16,8 +16,15 @@ identically against local or deployed instances).
 
 USAGE
 -----
-    python verify_deployment.py --base-url http://localhost:3000
-    python verify_deployment.py --base-url https://sw-test-courses-exercises.vercel.app
+    python verify_deployment.py --target local
+    python verify_deployment.py --target remote     (default; production)
+    python verify_deployment.py --base-url http://localhost:3555   (explicit override, e.g. a different port)
+
+Same --target/--base-url convention as test_level1_buy.py,
+test_level1_buy_ui.py, and load_test.py. "local" means
+offline-server.js or vercel dev on localhost:3000 -- not a database
+distinction the way it is for triplet_coverage_monitor.py, since this
+script only ever talks HTTP, never Postgres directly.
 
 Teacher credentials are required (settings must be flipped across levels
 and bug toggles to exercise everything). Supply them via environment
@@ -38,9 +45,11 @@ toggle, the required-email-domain) while it runs, then restores whatever
 they were before it started. If you run this against the live production
 URL while a class is actively using the simulator, they will briefly see
 different behavior (wrong level, bugs toggled on) during the run. Prefer
-running it against a local `vercel dev` instance for routine checks; only
-run it against production when nobody's actively using the app (e.g.
-right after a deploy, before a class starts).
+`--target local` (offline-server.js or vercel dev) for routine checks;
+--target remote is the default specifically so you have to notice you're
+about to hit production, but only actually run it there when nobody's
+actively using the app (e.g. right after a deploy, before a class
+starts).
 
 All test data uses generated `verify-<run-id>-...@example.com` addresses
 (never a real-looking student email), and is cleaned up via the student
@@ -60,6 +69,9 @@ import sys
 import uuid
 
 import requests
+
+REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
+LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
 
 RUN_ID = uuid.uuid4().hex[:8]
 
@@ -455,13 +467,17 @@ def cleanup_test_data(client: Client, original_settings: dict):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--base-url", default=os.environ.get("BASE_URL", "http://localhost:3000"),
-                         help="e.g. http://localhost:3000 or https://sw-test-courses-exercises.vercel.app")
+    parser.add_argument("--target", choices=["local", "remote"], default="remote",
+                         help=f"'local' = {LOCAL_BASE_URL} (offline-server.js or vercel dev), "
+                              f"'remote' = {REMOTE_BASE_URL} (default).")
+    parser.add_argument("--base-url", default=None,
+                         help="Explicit base URL, overrides --target.")
     parser.add_argument("--username", default=os.environ.get("TEACHER_USERNAME"))
     parser.add_argument("--password", default=os.environ.get("TEACHER_PASSWORD"))
     parser.add_argument("--wipe-all-data", action="store_true",
                          help="Also run the destructive teacher reset-all check (still asks for interactive confirmation).")
     args = parser.parse_args()
+    args.base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
 
     username = args.username or input("Teacher username: ")
     password = args.password or getpass.getpass("Teacher password: ")

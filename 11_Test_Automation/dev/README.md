@@ -251,14 +251,15 @@ you stop it or reboot.) `offline-server.js` serves on
 `vercel dev` would: `/` for the student page, `/teacher.html` for the
 teacher console.
 
-`test_level1_buy.py`, `test_level1_buy_ui.py`, and `load_test.py` all
-accept `--target local` (this server) or `--target remote` (production,
-the default) — or `--base-url <anything>` for an explicit override, e.g.
-a different port:
+`test_level1_buy.py`, `test_level1_buy_ui.py`, `load_test.py`, and
+`verify_deployment.py` all accept `--target local` (this server) or
+`--target remote` (production, the default) — or `--base-url <anything>`
+for an explicit override, e.g. a different port:
 ```bash
 python test_level1_buy.py --target local
 python test_level1_buy_ui.py --target local
 python load_test.py --target local --users 10
+python verify_deployment.py --target local
 ```
 
 `triplet_coverage_monitor.py` accepts the same `--target local`/`remote`
