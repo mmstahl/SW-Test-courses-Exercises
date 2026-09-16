@@ -5,9 +5,9 @@
     logoutBtn: document.getElementById('logout-btn'),
     loadMsg: document.getElementById('load-msg'),
     loginPanel: document.getElementById('login-panel'),
+    loginForm: document.getElementById('login-form'),
     loginUsername: document.getElementById('login-username'),
     loginPassword: document.getElementById('login-password'),
-    loginBtn: document.getElementById('login-btn'),
     loginMsg: document.getElementById('login-msg'),
     settingsPanel: document.getElementById('settings-panel'),
     dangerZone: document.getElementById('danger-zone'),
@@ -117,7 +117,11 @@
       });
   }
 
-  els.loginBtn.addEventListener('click', function () {
+  // A <form> submit fires both on clicking the (type="submit") login
+  // button and on pressing Enter in either field -- one handler covers
+  // both, for free, via normal browser form-submission behavior.
+  els.loginForm.addEventListener('submit', function (e) {
+    e.preventDefault();
     showMsg(els.loginMsg, '', false);
     els.loginMsg.textContent = '';
     apiPost('/api/teacher/login', {

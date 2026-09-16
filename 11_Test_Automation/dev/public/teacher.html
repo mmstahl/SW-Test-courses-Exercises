@@ -45,15 +45,17 @@
 
   <div id="login-panel">
     <h2>Log in</h2>
-    <div class="field">
-      <label for="login-username">Username</label>
-      <input type="text" id="login-username" autocomplete="username">
-    </div>
-    <div class="field">
-      <label for="login-password">Password</label>
-      <input type="password" id="login-password" autocomplete="current-password">
-    </div>
-    <button id="login-btn">Log in</button>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" autocomplete="current-password">
+      </div>
+      <button type="submit" id="login-btn">Log in</button>
+    </form>
     <div id="login-msg" class="msg"></div>
   </div>
 
