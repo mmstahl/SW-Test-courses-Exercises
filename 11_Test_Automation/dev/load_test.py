@@ -33,8 +33,9 @@ actively using the app.
 
 USAGE
 -----
-    python load_test.py --base-url https://sw-test-courses-exercises.vercel.app --users 10
-    python load_test.py --base-url http://localhost:3000 --users 30
+    python load_test.py --target remote --users 10
+    python load_test.py --target local --users 30
+    python load_test.py --base-url https://some-other-host --users 10   (explicit override)
 
 Runs until you press Ctrl+C (each virtual user finishes its in-flight
 request, then a final summary is printed), or until --duration seconds
@@ -50,6 +51,9 @@ import threading
 import time
 
 import requests
+
+REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
+LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
 
 DEFAULT_OPTIONS = {
     "Model": ["Pixel 9", "Pixel 9 Pro", "Pixel 9 Pro XL"],
@@ -206,8 +210,11 @@ def cleanup(base_url: str, num_users: int, teacher_username: str, teacher_passwo
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--base-url", required=True,
-                         help="e.g. https://sw-test-courses-exercises.vercel.app or http://localhost:3000")
+    parser.add_argument("--target", choices=["local", "remote"], default="remote",
+                         help=f"'local' = {LOCAL_BASE_URL} (offline-server.js or vercel dev), "
+                              f"'remote' = {REMOTE_BASE_URL} (default).")
+    parser.add_argument("--base-url", default=None,
+                         help="Explicit base URL, overrides --target.")
     parser.add_argument("--users", type=int, default=10, help="Number of concurrent virtual users. Default 10.")
     parser.add_argument("--buy-weight", type=float, default=0.3,
                          help="Fraction (0-1) of requests that are Buy rather than Calculate. Default 0.3.")
@@ -223,6 +230,7 @@ def main() -> int:
                          help="If given (with --teacher-password), load-test data is cleaned up automatically on stop.")
     parser.add_argument("--teacher-password", default=None)
     args = parser.parse_args()
+    args.base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
 
     print(f"Target: {args.base_url}")
     print(f"Virtual users: {args.users}  |  buy-weight: {args.buy_weight}  |  think-time: {args.think_time}s")

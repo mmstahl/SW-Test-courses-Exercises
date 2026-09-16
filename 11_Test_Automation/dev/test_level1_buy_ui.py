@@ -53,7 +53,8 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
-BASE_URL = "https://sw-test-courses-exercises.vercel.app"
+REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
+LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
 DEFAULT_STUDENT_NAME = "student01"
 
 CONFIG = {
@@ -197,10 +198,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True,
                          help="Run Chrome headless (default), or visibly with --no-headless.")
+    parser.add_argument("--target", choices=["local", "remote"], default="remote",
+                         help=f"'local' = {LOCAL_BASE_URL} (offline-server.js or vercel dev), "
+                              f"'remote' = {REMOTE_BASE_URL} (default).")
+    parser.add_argument("--base-url", default=None,
+                         help="Explicit base URL, overrides --target.")
     parser.add_argument("--student-name", default=DEFAULT_STUDENT_NAME,
                          help=f"Local part of the student email to use (default: {DEFAULT_STUDENT_NAME}). "
                               "The full email typed into the form is <student-name>@example.com.")
     args = parser.parse_args()
+    base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
     email = f"{args.student_name}@example.com"
 
     all_passed = True
@@ -216,7 +223,8 @@ def main() -> int:
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
     driver = webdriver.Chrome(options=options)
     try:
-        driver.get(BASE_URL)
+        print(f"Target: {base_url}")
+        driver.get(base_url)
         # The dropdown <option>s are populated asynchronously (student.js
         # fetches /api/product-options and /api/ui-config on load) -- wait
         # for that to actually finish before trying to select anything,

@@ -41,7 +41,9 @@ import urllib.parse
 
 import requests
 
-BASE_URL = "https://sw-test-courses-exercises.vercel.app"
+REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
+LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
+BASE_URL = REMOTE_BASE_URL  # overwritten in main() based on --target/--base-url
 DEFAULT_STUDENT_NAME = "student01"
 
 CONFIG = {
@@ -156,17 +158,25 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
 
 
 def main() -> int:
+    global BASE_URL
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--target", choices=["local", "remote"], default="remote",
+                         help=f"'local' = {LOCAL_BASE_URL} (offline-server.js or vercel dev), "
+                              f"'remote' = {REMOTE_BASE_URL} (default).")
+    parser.add_argument("--base-url", default=None,
+                         help="Explicit base URL, overrides --target.")
     parser.add_argument("--student-name", default=DEFAULT_STUDENT_NAME,
                          help=f"Local part of the student email to use (default: {DEFAULT_STUDENT_NAME}). "
                               "The full email sent is <student-name>@example.com.")
     args = parser.parse_args()
+    BASE_URL = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
     email = f"{args.student_name}@example.com"
 
     all_passed = True
     want_price = expected_price(CONFIG)
 
     # ---- 1) Calculate Price ----
+    print(f"Target: {BASE_URL}")
     print(f"Calculating price for {email}...")
     t0 = time.perf_counter()
     calc_status, calc = calculate_price(email, CONFIG)

@@ -250,6 +250,16 @@ you stop it or reboot.) `offline-server.js` serves on
 `vercel dev` would: `/` for the student page, `/teacher.html` for the
 teacher console.
 
+`test_level1_buy.py`, `test_level1_buy_ui.py`, and `load_test.py` all
+accept `--target local` (this server) or `--target remote` (production,
+the default) — or `--base-url <anything>` for an explicit override, e.g.
+a different port:
+```bash
+python test_level1_buy.py --target local
+python test_level1_buy_ui.py --target local
+python load_test.py --target local --users 10
+```
+
 **What this actually guarantees, confirmed by testing rather than
 assumed:** the database dependency is fully eliminated (a test Buy landed
 in the local database, verified directly — not the cloud one, which still
