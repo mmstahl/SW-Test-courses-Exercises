@@ -79,6 +79,11 @@ currently has a value; any parameter left unselected contributes 0
   regardless of host. Purchase/discount-code/action-log history is
   row-shaped, growing data, one table each; teacher settings are a single
   singleton row (`settings`, `id = 1`) since they aren't row data.
+  Because of this host-agnosticism, local development can point at a
+  genuinely local Postgres instead of the cloud database — see README.md's
+  "Fully offline local development" — making it possible to run and test
+  the whole app (all business logic, `vercel dev` included) with no
+  internet access at all.
 * **Identity:** students identify themselves by **self-reporting an email
   address as a required parameter on every action** (Calculate/Buy/
   Return/Reset) — unchanged from the original app. This means **no login

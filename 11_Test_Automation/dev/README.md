@@ -50,7 +50,9 @@ instead.
    project's own setup instead deliberately shares one database across
    local/Preview/Production — see [Adding a teacher / setting up on a new
    machine](#adding-a-teacher--setting-up-on-a-new-machine) if that's the
-   situation you're in.)
+   situation you're in. If you want local dev to work with **no internet
+   at all**, see [Fully offline local development](#fully-offline-local-development)
+   instead — it needs a real local Postgres, not a cloud one.)
 
 4. **Configure environment variables.** Copy `.env.example` to `.env.local`
    and fill in:
@@ -165,6 +167,85 @@ collaborator touching the code):
 | 5. `npm run db:migrate` | **Skip** — schema's already applied. Harmless to re-run if unsure (every statement is idempotent), just not necessary. |
 | 6. Seed a teacher | Only if *that person* needs their own login; otherwise skip. |
 | 7. `npx vercel dev` | Yes, to actually run/test locally. |
+
+## Fully offline local development
+
+Normal local dev (`npx vercel dev`) still needs internet, even though the
+*code* runs on your machine — because `DATABASE_URL` points at a cloud
+Postgres database (Neon), and literally every API call (Calculate, Buy,
+...) needs that database. That's the actual thing standing between you
+and working offline; `vercel dev` itself isn't the problem.
+
+The fix is a **second, genuinely local Postgres** that only your machine
+can see, with `DATABASE_URL` pointed at it instead. This is a real,
+separate database from the cloud one — purchases, settings, everything
+you do locally after this point stay local and never appear in
+Production, and vice versa. That's an intentional trade-off, not a bug:
+there's no way to have both "shares live state with Production" and
+"works with the network off" at the same time.
+
+**One-time setup:**
+
+1. Download the **portable Postgres binaries** (not the installer) for
+   whatever major version your production database runs — check with:
+   ```bash
+   node -e "require('./lib/loadEnv').loadEnv(); const {Pool}=require('pg'); new Pool({connectionString:process.env.DATABASE_URL}).query('SELECT version()').then(r=>{console.log(r.rows[0].version); process.exit()})"
+   ```
+   from **https://www.enterprisedb.com/download-postgresql-binaries** (Windows x86-64). This is a plain ZIP — no installer, no admin rights needed, nothing registered as a Windows service. Extract it somewhere simple with no spaces in the path, and **outside any OneDrive-synced folder** (a database actively writing files while OneDrive tries to sync them is a bad combination — the same class of problem we hit renaming the `vercel` folder earlier).
+
+2. Initialize a data directory and create the database (adjust paths to
+   wherever you extracted the binaries):
+   ```bash
+   "<PGBIN>\initdb.exe" -D "<PGDATA_LOCAL>" -U postgres --pwfile=<a file containing a password, one line> -A scram-sha-256 -E UTF8
+   "<PGBIN>\pg_ctl.exe" -D "<PGDATA_LOCAL>" -l "<PGDATA_LOCAL>\..\pglog.txt" -o "-p 5432" start
+   "<PGBIN>\createdb.exe" -h localhost -p 5432 -U postgres phone_sim
+   ```
+
+3. In `.env.local`, point `DATABASE_URL` at it instead of the cloud
+   connection string, and add the variables `db/local-db.ps1` (see below)
+   needs to find your install:
+   ```
+   DATABASE_URL=postgresql://postgres:<your password>@localhost:5432/phone_sim?sslmode=disable
+   PGBIN=<PGBIN>
+   PGDATA_LOCAL=<PGDATA_LOCAL>
+   PGPORT_LOCAL=5432
+   ```
+   Keep your old cloud connection string too, under a different variable
+   name (e.g. `CLOUD_DATABASE_URL`) — it's handy for pointing
+   `verify_deployment.py`/`load_test.py`/`triplet_coverage_monitor.py` at
+   production explicitly via their `--database-url`/`--base-url` flags,
+   now that plain `DATABASE_URL` means "local" instead.
+
+4. Apply the schema and seed a teacher account against it, same commands
+   as always — they'll pick up the new local `DATABASE_URL` automatically:
+   ```bash
+   npm run db:migrate
+   npm run db:seed-teacher -- <username> <password>
+   ```
+
+**Each time you want to work offline**, start the local database first
+(it's a plain background process, not a service — it won't auto-start on
+its own, and stops if you stop it or reboot):
+```powershell
+.\db\local-db.ps1 start
+```
+(`status` and `stop` also work.) Then `npx vercel dev` as usual.
+
+**What this does and doesn't guarantee:** the database dependency — the
+actual reason nothing worked offline before — is now fully eliminated;
+every API call resolves against `localhost`, verified directly (a test
+Buy landed in the local database, not the cloud one, and the local
+database contains only that one row). Vercel CLI telemetry, one known
+source of the tool *itself* phoning home, has also been turned off
+(`npx vercel telemetry disable`) — this is a global setting for your
+whole machine, not just this project; re-enable with
+`npx vercel telemetry enable` if you'd rather opt back in. What I can't
+fully certify without literally testing with the network off is whether
+`vercel dev` itself ever needs to re-validate your login session or fetch
+project metadata from Vercel's API on startup — that's Vercel's own CLI
+behavior, outside this project's control. If you hit that, the practical
+workaround is running `vercel dev` once while online so anything it caches
+locally is warm, then going offline for subsequent runs.
 
 ## Project layout
 
