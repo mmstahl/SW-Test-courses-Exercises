@@ -6,11 +6,22 @@ each student's all-triplets (3-way) combinatorial coverage for the
 Level 1 exercise.
 
 USAGE
-    python triplet_coverage_monitor.py [options]
+    python triplet_coverage_monitor.py                 # --target remote (default)
+    python triplet_coverage_monitor.py --target local   # your local offline Postgres
 
-    Reads DATABASE_URL from .env.local in this folder by default (the
-    same file `vercel dev` uses), or pass --database-url / set the
-    DATABASE_URL environment variable explicitly.
+    --target remote (the default -- for watching a real class on
+    production) reads CLOUD_DATABASE_URL from the environment or
+    .env.local, falling back to plain DATABASE_URL if you haven't split
+    into a local/cloud setup (see README.md's "Fully offline local
+    development"). --target local reads DATABASE_URL directly. Either
+    way, --database-url overrides everything.
+
+    IMPORTANT: if you've done the offline-dev setup, plain DATABASE_URL
+    in .env.local now points at your LOCAL database, not production --
+    running this with no flags at all used to just work off whatever
+    DATABASE_URL was; now it deliberately defaults to --target remote
+    instead, specifically so it doesn't silently watch the wrong
+    database.
 
 WHAT "ALL TRIPLETS" MEANS HERE
     Level 1 has 5 parameters (Model, Storage, Color, Network, Accessory).
@@ -30,9 +41,9 @@ WHY CALCULATE PRICE ONLY (not Buy)
     though it also submits a full config.
 
 HOW IT READS THE DATA
-    Connects directly to Postgres (the same DATABASE_URL db/migrate.js
-    uses) and reads action_log on its own schedule -- it never goes
-    through the app's API at all, so it adds zero load to whatever
+    Connects directly to Postgres (see USAGE above for which connection
+    string that is) and reads action_log on its own schedule -- it never
+    goes through the app's API at all, so it adds zero load to whatever
     students' own requests are doing; it's a completely separate
     resource. Coverage is recomputed from scratch on every poll (cheap at
     class-sized data volumes), so there's no incremental state to drift
@@ -132,14 +143,40 @@ class FetchError(Exception):
     """Raised whenever we can't get a clean coverage snapshot from the DB."""
 
 
-def load_database_url_from_env_file():
+def load_env_var_from_file(key: str):
     env_path = Path(__file__).parent / ".env.local"
     if not env_path.exists():
         return None
+    prefix = f"{key}="
     for line in env_path.read_text().splitlines():
         line = line.strip()
-        if line.startswith("DATABASE_URL="):
-            return line.split("=", 1)[1].strip().strip('"').strip("'")
+        if line.startswith(prefix):
+            return line[len(prefix):].strip().strip('"').strip("'")
+    return None
+
+
+def resolve_database_url(args) -> str:
+    """--database-url always wins. Otherwise --target local reads
+    DATABASE_URL (the local Postgres, per README.md's "Fully offline
+    local development" -- that's what this variable means once you've
+    done that setup); --target remote (the default) reads
+    CLOUD_DATABASE_URL, falling back to plain DATABASE_URL if
+    CLOUD_DATABASE_URL isn't set -- i.e. if you're on the single-shared-
+    database setup (no local/cloud split), DATABASE_URL IS "remote", and
+    --target remote finding it there is correct, not a fallback typo."""
+    if args.database_url:
+        return args.database_url
+    if args.target == "local":
+        key = "DATABASE_URL"
+    else:
+        key = "CLOUD_DATABASE_URL"
+    url = os.environ.get(key) or load_env_var_from_file(key)
+    if url:
+        return url
+    if args.target == "remote":
+        # No CLOUD_DATABASE_URL at all -- assume the single-shared-database
+        # setup, where plain DATABASE_URL already points at production.
+        return os.environ.get("DATABASE_URL") or load_env_var_from_file("DATABASE_URL")
     return None
 
 
@@ -386,18 +423,23 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
+    parser.add_argument("--target", choices=["local", "remote"], default="remote",
+                         help="'local' reads DATABASE_URL (your local offline Postgres, if you've set that up "
+                              "-- see README.md's 'Fully offline local development'); 'remote' (default) reads "
+                              "CLOUD_DATABASE_URL, falling back to DATABASE_URL if that's not set (the "
+                              "single-shared-database setup).")
     parser.add_argument("--database-url", default=None,
-                         help="Defaults to DATABASE_URL from the environment, then .env.local.")
+                         help="Explicit connection string, overrides --target entirely.")
     parser.add_argument("--interval", type=float, default=5.0, help="Refresh interval in seconds (default: 5)")
     parser.add_argument("--since-start-of-day", action="store_true",
                          help="Count all of today's CalculatePrice actions, not just ones logged after this "
                               "monitor starts (the default -- avoids counting old testing/dev noise).")
     args = parser.parse_args()
 
-    database_url = args.database_url or os.environ.get("DATABASE_URL") or load_database_url_from_env_file()
+    database_url = resolve_database_url(args)
     if not database_url:
-        parser.error("No database URL found -- pass --database-url, set DATABASE_URL, "
-                      "or make sure .env.local exists in this folder.")
+        parser.error(f"No database URL found for --target {args.target} -- pass --database-url explicitly, "
+                      "set the corresponding environment variable, or add it to .env.local.")
 
     since = (
         datetime.combine(date.today(), dtime.min).astimezone()
@@ -405,6 +447,7 @@ def main():
         else datetime.now().astimezone()
     )
 
+    print(f"Target: {args.target}")
     print(f"Tracking Calculate Price coverage since {since.strftime('%Y-%m-%d %H:%M:%S %z')}")
     print(f"Total possible triplets (Level 1, all 10 subsets): {TOTAL_TRIPLETS}")
 

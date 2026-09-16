@@ -224,10 +224,11 @@ there's no way to have both "shares live state with Production" and
    PGPORT_LOCAL=5432
    ```
    Keep your old cloud connection string too, under a different variable
-   name (e.g. `CLOUD_DATABASE_URL`) — it's handy for pointing
-   `verify_deployment.py`/`load_test.py`/`triplet_coverage_monitor.py` at
-   production explicitly via their `--database-url`/`--base-url` flags,
-   now that plain `DATABASE_URL` means "local" instead.
+   name, `CLOUD_DATABASE_URL` — `triplet_coverage_monitor.py` (the only
+   one of these scripts that talks to Postgres directly rather than over
+   HTTP) reads it automatically for `--target remote` now that plain
+   `DATABASE_URL` means "local" instead. Without it, that script would
+   have no way to tell "remote" and "local" apart.
 
 4. Apply the schema and seed a teacher account against it, same commands
    as always — they'll pick up the new local `DATABASE_URL` automatically:
@@ -258,6 +259,13 @@ a different port:
 python test_level1_buy.py --target local
 python test_level1_buy_ui.py --target local
 python load_test.py --target local --users 10
+```
+
+`triplet_coverage_monitor.py` accepts the same `--target local`/`remote`
+(it talks to Postgres directly rather than over HTTP, so "remote" there
+means reading `CLOUD_DATABASE_URL` — see step 3 above):
+```bash
+python triplet_coverage_monitor.py --target local
 ```
 
 **What this actually guarantees, confirmed by testing rather than
