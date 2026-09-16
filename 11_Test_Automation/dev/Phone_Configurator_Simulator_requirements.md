@@ -80,10 +80,14 @@ currently has a value; any parameter left unselected contributes 0
   row-shaped, growing data, one table each; teacher settings are a single
   singleton row (`settings`, `id = 1`) since they aren't row data.
   Because of this host-agnosticism, local development can point at a
-  genuinely local Postgres instead of the cloud database — see README.md's
-  "Fully offline local development" — making it possible to run and test
-  the whole app (all business logic, `vercel dev` included) with no
-  internet access at all.
+  genuinely local Postgres instead of the cloud database, eliminating the
+  database as a reason to need internet. `vercel dev` itself, however,
+  was confirmed (by testing, not assumed) to hard-require a network
+  round-trip to Vercel's API on every startup regardless of login/cache
+  state, so it cannot run offline no matter what this project does — see
+  README.md's "Fully offline local development" for the actual fully
+  offline path, which uses a small plain-Node substitute
+  (`offline-server.js`) instead of `vercel dev`.
 * **Identity:** students identify themselves by **self-reporting an email
   address as a required parameter on every action** (Calculate/Buy/
   Return/Reset) — unchanged from the original app. This means **no login

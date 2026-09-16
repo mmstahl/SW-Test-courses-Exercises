@@ -170,16 +170,29 @@ collaborator touching the code):
 
 ## Fully offline local development
 
-Normal local dev (`npx vercel dev`) still needs internet, even though the
-*code* runs on your machine — because `DATABASE_URL` points at a cloud
-Postgres database (Neon), and literally every API call (Calculate, Buy,
-...) needs that database. That's the actual thing standing between you
-and working offline; `vercel dev` itself isn't the problem.
+Two separate things stand between you and working with no internet at
+all, and only one of them is actually fixable from this project's side:
 
-The fix is a **second, genuinely local Postgres** that only your machine
-can see, with `DATABASE_URL` pointed at it instead. This is a real,
-separate database from the cloud one — purchases, settings, everything
-you do locally after this point stay local and never appear in
+1. **`DATABASE_URL` pointing at a cloud Postgres database (Neon)** —
+   literally every API call (Calculate, Buy, ...) needs it. Fixable: point
+   it at a real local Postgres instead (below).
+2. **`vercel dev` itself.** This was tested directly, not assumed: even
+   with a freshly-logged-in session and a prior successful *online* run
+   of `vercel dev` (to give it every chance to cache something locally),
+   it still fails outright the moment the network is gone — it does a
+   mandatory "Retrieving..." step (pulling project/session info from
+   Vercel's API) before it'll serve anything at all, no flag or cached
+   state avoids it. That's Vercel CLI's own hard requirement, not a bug
+   in this project, and not something fixable here. **So for offline
+   work, don't use `vercel dev`** — use `offline-server.js` instead (see
+   "Running it" below), a small plain-Node server with zero network
+   dependency of its own, serving the exact same `public/` and `api/`
+   files.
+
+The database fix is a **second, genuinely local Postgres** that only your
+machine can see, with `DATABASE_URL` pointed at it instead. This is a
+real, separate database from the cloud one — purchases, settings,
+everything you do locally after this point stay local and never appear in
 Production, and vice versa. That's an intentional trade-off, not a bug:
 there's no way to have both "shares live state with Production" and
 "works with the network off" at the same time.
@@ -223,29 +236,32 @@ there's no way to have both "shares live state with Production" and
    npm run db:seed-teacher -- <username> <password>
    ```
 
-**Each time you want to work offline**, start the local database first
-(it's a plain background process, not a service — it won't auto-start on
-its own, and stops if you stop it or reboot):
-```powershell
-.\db\local-db.ps1 start
-```
-(`status` and `stop` also work.) Then `npx vercel dev` as usual.
+**Running it, each time you want to work offline:**
 
-**What this does and doesn't guarantee:** the database dependency — the
-actual reason nothing worked offline before — is now fully eliminated;
-every API call resolves against `localhost`, verified directly (a test
-Buy landed in the local database, not the cloud one, and the local
-database contains only that one row). Vercel CLI telemetry, one known
-source of the tool *itself* phoning home, has also been turned off
-(`npx vercel telemetry disable`) — this is a global setting for your
-whole machine, not just this project; re-enable with
-`npx vercel telemetry enable` if you'd rather opt back in. What I can't
-fully certify without literally testing with the network off is whether
-`vercel dev` itself ever needs to re-validate your login session or fetch
-project metadata from Vercel's API on startup — that's Vercel's own CLI
-behavior, outside this project's control. If you hit that, the practical
-workaround is running `vercel dev` once while online so anything it caches
-locally is warm, then going offline for subsequent runs.
+```bash
+.\db\local-db.ps1 start
+node offline-server.js
+```
+
+(`db\local-db.ps1 status` / `stop` also work — it's a plain background
+process, not a service, so it won't auto-start on its own and stops if
+you stop it or reboot.) `offline-server.js` serves on
+`http://localhost:3000` by default (`--port` to change it) — same URLs as
+`vercel dev` would: `/` for the student page, `/teacher.html` for the
+teacher console.
+
+**What this actually guarantees, confirmed by testing rather than
+assumed:** the database dependency is fully eliminated (a test Buy landed
+in the local database, verified directly — not the cloud one, which still
+had zero new rows), and `offline-server.js` has no network dependency of
+its own — it's plain Node `http`, nothing more. Together that's a real,
+verified, fully-offline path to running and testing this app. `vercel
+dev` is deliberately **not** part of that path, because it can't be —
+see above. Vercel CLI telemetry was also disabled
+(`npx vercel telemetry disable`, a global setting for your whole machine,
+not just this project; `npx vercel telemetry enable` to opt back in) —
+harmless either way now that `vercel dev` isn't in the offline path at
+all, but no reason to leave it on.
 
 ## Project layout
 
@@ -257,3 +273,6 @@ locally is warm, then going offline for subsequent runs.
 - `public/` — the student (`index.html`) and teacher (`teacher.html`) pages
   and their JS, using the same element `id`s as the reference app so
   existing Selenium-facing course material doesn't need updating.
+- `offline-server.js` — a plain-Node substitute for `vercel dev`, used
+  only for fully offline local development (`vercel dev` itself can't run
+  without network — see [Fully offline local development](#fully-offline-local-development)).
