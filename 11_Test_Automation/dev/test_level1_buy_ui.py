@@ -205,6 +205,11 @@ def main() -> int:
     options = webdriver.ChromeOptions()
     if args.headless:
         options.add_argument("--headless=new")
+    # Suppresses harmless Chrome-internal log noise (e.g. GCM
+    # "PHONE_REGISTRATION_ERROR") that has nothing to do with this test --
+    # the automated profile has no signed-in Google account, so Chrome's
+    # background push-notification registration always fails.
+    options.add_experimental_option("excludeSwitches", ["enable-logging"])
     driver = webdriver.Chrome(options=options)
     try:
         driver.get(BASE_URL)
