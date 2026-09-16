@@ -32,6 +32,7 @@ mutating action, so it's POST there too -- that didn't change).
 Requires: pip install requests, and curl available on PATH.
 """
 
+import argparse
 import json
 import subprocess
 import sys
@@ -41,7 +42,7 @@ import urllib.parse
 import requests
 
 BASE_URL = "https://sw-test-courses-exercises.vercel.app"
-EMAIL = "student01@example.com"
+DEFAULT_STUDENT_NAME = "student01"
 
 CONFIG = {
     "model": "Pixel 9",
@@ -155,13 +156,20 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--student-name", default=DEFAULT_STUDENT_NAME,
+                         help=f"Local part of the student email to use (default: {DEFAULT_STUDENT_NAME}). "
+                              "The full email sent is <student-name>@example.com.")
+    args = parser.parse_args()
+    email = f"{args.student_name}@example.com"
+
     all_passed = True
     want_price = expected_price(CONFIG)
 
     # ---- 1) Calculate Price ----
-    print("Calculating price...")
+    print(f"Calculating price for {email}...")
     t0 = time.perf_counter()
-    calc_status, calc = calculate_price(EMAIL, CONFIG)
+    calc_status, calc = calculate_price(email, CONFIG)
     calc_elapsed = time.perf_counter() - t0
     print(f"  ({calc_elapsed:.2f}s)")
     if not check("Calculate: request succeeded (HTTP 200)", calc_status == 200,
@@ -187,7 +195,7 @@ def main() -> int:
     # first place.
     print("\nBuying...")
     t1 = time.perf_counter()
-    buy_status, bought = buy_phone(EMAIL, CONFIG)
+    buy_status, bought = buy_phone(email, CONFIG)
     buy_elapsed = time.perf_counter() - t1
     print(f"  ({buy_elapsed:.2f}s)")
     if not check("Buy: request succeeded (HTTP 200)", buy_status == 200,

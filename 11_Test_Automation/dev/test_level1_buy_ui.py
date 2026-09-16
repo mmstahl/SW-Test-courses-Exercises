@@ -54,7 +54,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
 BASE_URL = "https://sw-test-courses-exercises.vercel.app"
-EMAIL = "student01@example.com"
+DEFAULT_STUDENT_NAME = "student01"
 
 CONFIG = {
     "model": "Pixel 9",
@@ -197,7 +197,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True,
                          help="Run Chrome headless (default), or visibly with --no-headless.")
+    parser.add_argument("--student-name", default=DEFAULT_STUDENT_NAME,
+                         help=f"Local part of the student email to use (default: {DEFAULT_STUDENT_NAME}). "
+                              "The full email typed into the form is <student-name>@example.com.")
     args = parser.parse_args()
+    email = f"{args.student_name}@example.com"
 
     all_passed = True
     want_price = expected_price(CONFIG)
@@ -225,7 +229,7 @@ def main() -> int:
 
         # ---- 1) Calculate Price ----
         print("\nCalculating price...")
-        total = calculate_price(driver, EMAIL, CONFIG)
+        total = calculate_price(driver, email, CONFIG)
         print(f"  UI shows Total Price: {total}")
         all_passed &= check(
             "Calculate: Total Price matches independently computed price",
@@ -243,7 +247,7 @@ def main() -> int:
         )
 
         print("\nRecalculating...")
-        calculate_price(driver, EMAIL, CONFIG)
+        calculate_price(driver, email, CONFIG)
         all_passed &= verify_buy_button_enabled(driver, True, "enabled again after recalculating")
 
         # ---- 3) Buy ----
