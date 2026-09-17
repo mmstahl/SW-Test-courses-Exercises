@@ -29,6 +29,20 @@ hidden behind a Python HTTP client -- same reasoning as the original.
 buy_phone() uses requests directly, same as the original (Buy is a
 mutating action, so it's POST there too -- that didn't change).
 
+--student-name is REQUIRED (not defaulted): this script buys a real
+phone under that email, and always resets that student's own data at
+the end (POST /api/reset, no auth needed -- it's the same self-service
+call the "Reset my data" button makes) so repeated runs start from a
+clean slate, rather than stepping on other students' or other runs'
+purchase history. That reset needs studentResetEnabled turned on --
+this script does NOT set that itself (or any other setting): settings
+are global to the whole deployment, so if every student's script
+instance also toggled them, many running in parallel would race and
+stomp on each other. Have the teacher turn studentResetEnabled on for
+the class once, ahead of time. This never touches action_log: /api/reset
+only deletes from purchases/discount_codes/store_credit, and the Reset
+call itself adds a new action_log row rather than removing any.
+
 Requires: pip install requests, and curl available on PATH.
 """
 
@@ -44,7 +58,6 @@ import requests
 REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
 LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
 BASE_URL = REMOTE_BASE_URL  # overwritten in main() based on --target/--base-url
-DEFAULT_STUDENT_NAME = "student01"
 
 CONFIG = {
     "model": "Pixel 9",
@@ -157,6 +170,21 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
+# ---------------------------------------------------------------------
+# Per-student reset (plain requests, not curl -- this isn't one of the
+# "under the UI" calls this script exists to demonstrate, just teardown
+# around them). No auth needed: same self-service call the "Reset my
+# data" button makes for the currently-typed-in email.
+# ---------------------------------------------------------------------
+
+def reset_student(base_url: str, email: str):
+    resp = requests.post(f"{base_url}/api/reset", json={"email": email})
+    try:
+        return resp.status_code, resp.json()
+    except ValueError:
+        return resp.status_code, {}
+
+
 def main() -> int:
     global BASE_URL
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -165,9 +193,11 @@ def main() -> int:
                               f"'remote' = {REMOTE_BASE_URL} (default).")
     parser.add_argument("--base-url", default=None,
                          help="Explicit base URL, overrides --target.")
-    parser.add_argument("--student-name", default=DEFAULT_STUDENT_NAME,
-                         help=f"Local part of the student email to use (default: {DEFAULT_STUDENT_NAME}). "
-                              "The full email sent is <student-name>@example.com.")
+    parser.add_argument("--student-name", required=True,
+                         help="Local part of the student email to use, e.g. --student-name alice01. "
+                              "Required (not defaulted) -- this test buys a real phone and always "
+                              "resets that student's data afterward, so each run needs to be "
+                              "unambiguously attributable to one student.")
     args = parser.parse_args()
     BASE_URL = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
     email = f"{args.student_name}@example.com"
@@ -175,76 +205,91 @@ def main() -> int:
     all_passed = True
     want_price = expected_price(CONFIG)
 
-    # ---- 1) Calculate Price ----
     print(f"Target: {BASE_URL}")
-    print(f"Calculating price for {email}...")
-    t0 = time.perf_counter()
-    calc_status, calc = calculate_price(email, CONFIG)
-    calc_elapsed = time.perf_counter() - t0
-    print(f"  ({calc_elapsed:.2f}s)")
-    if not check("Calculate: request succeeded (HTTP 200)", calc_status == 200,
-                  f"status={calc_status}, server said: {calc.get('error')}"):
-        print("\nSOME CHECKS FAILED")
-        return 1
-    print(f"  Server returned basePrice={calc['basePrice']}, paidPrice={calc['paidPrice']}")
-    all_passed &= check(
-        "Calculate: basePrice matches independently computed price",
-        calc["basePrice"] == want_price,
-        f"expected {want_price}, got {calc['basePrice']}",
-    )
-    all_passed &= check(
-        "Calculate: paidPrice equals basePrice (no discount at Level 1)",
-        calc["paidPrice"] == want_price,
-        f"expected {want_price}, got {calc['paidPrice']}",
-    )
 
-    # ---- 2) Buy ----
-    # Deliberately not retried: Buy is not idempotent (it records a
-    # purchase every call). Unlike the old Apps Script version, there's
-    # also no known infrastructure flakiness here to retry around in the
-    # first place.
-    print("\nBuying...")
-    t1 = time.perf_counter()
-    buy_status, bought = buy_phone(email, CONFIG)
-    buy_elapsed = time.perf_counter() - t1
-    print(f"  ({buy_elapsed:.2f}s)")
-    if not check("Buy: request succeeded (HTTP 200)", buy_status == 200,
-                  f"status={buy_status}, server said: {bought.get('error')}"):
-        print("\nSOME CHECKS FAILED")
-        return 1
-    print(f"  Server returned basePrice={bought['basePrice']}, paidPrice={bought['paidPrice']}")
-    all_passed &= check(
-        "Buy: basePrice matches independently computed price",
-        bought["basePrice"] == want_price,
-        f"expected {want_price}, got {bought['basePrice']}",
-    )
-    all_passed &= check(
-        "Buy: paidPrice equals basePrice (no discount at Level 1)",
-        bought["paidPrice"] == want_price,
-        f"expected {want_price}, got {bought['paidPrice']}",
-    )
+    try:
+        # ---- 1) Calculate Price ----
+        print(f"Calculating price for {email}...")
+        t0 = time.perf_counter()
+        calc_status, calc = calculate_price(email, CONFIG)
+        calc_elapsed = time.perf_counter() - t0
+        print(f"  ({calc_elapsed:.2f}s)")
+        if not check("Calculate: request succeeded (HTTP 200)", calc_status == 200,
+                      f"status={calc_status}, server said: {calc.get('error')}"):
+            print("\nSOME CHECKS FAILED")
+            return 1
+        print(f"  Server returned basePrice={calc['basePrice']}, paidPrice={calc['paidPrice']}")
+        all_passed &= check(
+            "Calculate: basePrice matches independently computed price",
+            calc["basePrice"] == want_price,
+            f"expected {want_price}, got {calc['basePrice']}",
+        )
+        all_passed &= check(
+            "Calculate: paidPrice equals basePrice (no discount at Level 1)",
+            calc["paidPrice"] == want_price,
+            f"expected {want_price}, got {calc['paidPrice']}",
+        )
 
-    # "Message" check -- see module docstring: this verifies the echoed
-    # config, then reconstructs (does not fetch) the message it implies.
-    returned_config = {
-        "model": bought["config"]["Model"],
-        "storage": bought["config"]["Storage"],
-        "color": bought["config"]["Color"],
-        "network": bought["config"]["Network"],
-        "accessory": bought["config"]["Accessory"],
-    }
-    all_passed &= check(
-        "Buy: echoed config matches what was requested",
-        returned_config == CONFIG,
-        f"expected {CONFIG}, got {returned_config}",
-    )
-    print(f"  Reconstructed (not server-returned) message: "
-          f"{expected_congrats_message(returned_config)!r}")
+        # ---- 2) Buy ----
+        # Deliberately not retried: Buy is not idempotent (it records a
+        # purchase every call). Unlike the old Apps Script version, there's
+        # also no known infrastructure flakiness here to retry around in the
+        # first place.
+        print("\nBuying...")
+        t1 = time.perf_counter()
+        buy_status, bought = buy_phone(email, CONFIG)
+        buy_elapsed = time.perf_counter() - t1
+        print(f"  ({buy_elapsed:.2f}s)")
+        if not check("Buy: request succeeded (HTTP 200)", buy_status == 200,
+                      f"status={buy_status}, server said: {bought.get('error')}"):
+            print("\nSOME CHECKS FAILED")
+            return 1
+        print(f"  Server returned basePrice={bought['basePrice']}, paidPrice={bought['paidPrice']}")
+        all_passed &= check(
+            "Buy: basePrice matches independently computed price",
+            bought["basePrice"] == want_price,
+            f"expected {want_price}, got {bought['basePrice']}",
+        )
+        all_passed &= check(
+            "Buy: paidPrice equals basePrice (no discount at Level 1)",
+            bought["paidPrice"] == want_price,
+            f"expected {want_price}, got {bought['paidPrice']}",
+        )
 
-    print(f"\nTiming: calculate={calc_elapsed:.2f}s, buy={buy_elapsed:.2f}s, "
-          f"total={calc_elapsed + buy_elapsed:.2f}s")
-    print("\n" + ("ALL CHECKS PASSED" if all_passed else "SOME CHECKS FAILED"))
-    return 0 if all_passed else 1
+        # "Message" check -- see module docstring: this verifies the echoed
+        # config, then reconstructs (does not fetch) the message it implies.
+        returned_config = {
+            "model": bought["config"]["Model"],
+            "storage": bought["config"]["Storage"],
+            "color": bought["config"]["Color"],
+            "network": bought["config"]["Network"],
+            "accessory": bought["config"]["Accessory"],
+        }
+        all_passed &= check(
+            "Buy: echoed config matches what was requested",
+            returned_config == CONFIG,
+            f"expected {CONFIG}, got {returned_config}",
+        )
+        print(f"  Reconstructed (not server-returned) message: "
+              f"{expected_congrats_message(returned_config)!r}")
+
+        print(f"\nTiming: calculate={calc_elapsed:.2f}s, buy={buy_elapsed:.2f}s, "
+              f"total={calc_elapsed + buy_elapsed:.2f}s")
+        print("\n" + ("ALL CHECKS PASSED" if all_passed else "SOME CHECKS FAILED"))
+        return 0 if all_passed else 1
+    finally:
+        # Always reset this student's own data -- not a reset-ALL, just
+        # the same per-student cleanup the "Reset my data" button
+        # performs -- so the next run starts from a clean slate. Never
+        # touches action_log (see module docstring). Requires
+        # studentResetEnabled to already be on; if it isn't, this just
+        # warns rather than failing the whole run.
+        reset_status, reset_body = reset_student(BASE_URL, email)
+        if reset_status == 200:
+            print(f"\nReset {email}'s data (clean slate for next run).")
+        else:
+            print(f"\n[WARN] Could not reset {email}'s data: "
+                  f"HTTP {reset_status} {reset_body.get('error')}")
 
 
 if __name__ == "__main__":

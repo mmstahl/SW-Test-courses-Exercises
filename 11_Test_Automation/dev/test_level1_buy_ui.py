@@ -39,6 +39,20 @@ recomputed, same as test_level1_buy.py -- Buy always talks to the real
 server regardless of which client drove it, so purchase integrity isn't
 what's being demonstrated here; the UI behavior wrapped around it is.
 
+--student-name is REQUIRED (not defaulted): this script buys two real
+phones under that email, and always resets that student's own data at
+the end (via the UI's own "Reset my data" button) so repeated runs
+start from a clean slate, rather than stepping on other students' or
+other runs' purchase history. That reset needs studentResetEnabled
+turned on -- this script does NOT set that itself (or any other
+setting): settings are global to the whole deployment, so if every
+student's script instance also toggled them, many running in parallel
+would race and stomp on each other. Have the teacher turn
+studentResetEnabled on for the class once, ahead of time. This never
+touches action_log: reset only deletes from
+purchases/discount_codes/store_credit, and the Reset action itself
+adds a new action_log row rather than removing any.
+
 Requires: pip install selenium
 Chrome must be installed. Selenium 4.6+'s built-in Selenium Manager
 downloads a matching chromedriver automatically -- no separate
@@ -51,11 +65,11 @@ import time
 
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select, WebDriverWait
 
 REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
 LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
-DEFAULT_STUDENT_NAME = "student01"
 
 CONFIG = {
     "model": "Pixel 9",
@@ -118,6 +132,49 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
 
 
 # ---------------------------------------------------------------------
+# Per-student reset, via the UI's own "Reset my data" button.
+# ---------------------------------------------------------------------
+
+def reset_student_data(driver, email: str) -> bool:
+    """Clicks 'Reset my data' and accepts the two native confirm/alert
+    dialogs student.js's handler uses (confirm(...) then alert(...)).
+    Mirrors test_level4_buy_ui.py's function of the same name.
+
+    Refills #student-email first: the reset handler posts whatever is
+    CURRENTLY in that field (els.email.value.trim()), not a value this
+    script passes separately -- if it's empty (e.g. right after
+    verify_client_side_email_validation() cleared it), the server
+    rejects the empty email and the success alert() this function
+    waits for never appears."""
+    email_field = driver.find_element(By.ID, "student-email")
+    email_field.clear()
+    email_field.send_keys(email)
+
+    reset_buttons = driver.find_elements(By.ID, "reset-btn")
+    if not reset_buttons or not reset_buttons[0].is_displayed():
+        print("  [WARN] Reset button not available (studentResetEnabled may be off) -- skipping.")
+        return False
+
+    reset_buttons[0].click()
+
+    try:
+        WebDriverWait(driver, 5).until(EC.alert_is_present())
+        driver.switch_to.alert.accept()
+    except Exception:
+        print("  [WARN] Expected confirm() dialog did not appear.")
+        return False
+
+    try:
+        WebDriverWait(driver, 5).until(EC.alert_is_present())
+        driver.switch_to.alert.accept()
+    except Exception:
+        print("  [WARN] Expected acknowledgement alert() did not appear.")
+        return False
+
+    return True
+
+
+# ---------------------------------------------------------------------
 # Page interactions -- these replace calculate_price()/buy_phone() from
 # test_level1_buy.py's curl/requests calls with real browser actions.
 # ---------------------------------------------------------------------
@@ -130,23 +187,39 @@ def fill_form(driver, email: str, config: dict) -> None:
         Select(driver.find_element(By.ID, select_id)).select_by_value(config[key])
 
 
+def _wait_for_settled_price(driver, timeout: float = 15.0, poll: float = 0.05) -> float:
+    """Polls #total-price for a value that shows up AFTER the field has
+    read empty at least once. Identical to test_level4_buy_ui.py's
+    function of the same name -- see that module for the full "why":
+    #price-breakdown's "hidden" attribute only clears the FIRST time a
+    calculation ever renders, and a fixed sleep after clicking Calculate
+    (this function's prior implementation) isn't reliable either --
+    confirmed empirically flaking against production even at Level 1,
+    where the fixed 0.5s pause sometimes lands before student.js's
+    blinkText() has cleared-then-refilled #total-price. Requiring an
+    observed empty read before accepting any value as final rules that
+    out; polling at 50ms keeps the ~150ms empty window from being
+    stepped over.
+    """
+    deadline = time.time() + timeout
+    seen_empty = False
+    while time.time() < deadline:
+        current = driver.find_element(By.ID, "total-price").text.strip()
+        if not current:
+            seen_empty = True
+        elif seen_empty:
+            return float(current)
+        time.sleep(poll)
+    raise TimeoutError("#total-price never showed a value after clearing in time.")
+
+
 def calculate_price(driver, email: str, config: dict) -> float:
     """Fills the form and clicks Calculate Price, exactly as a student
     would. Returns the Total Price read back from the DOM -- what the
     student actually sees, not an HTTP response."""
     fill_form(driver, email, config)
     driver.find_element(By.ID, "calc-price-btn").click()
-    WebDriverWait(driver, 10).until(
-        lambda d: d.find_element(By.ID, "price-breakdown").get_attribute("hidden") is None
-    )
-    # student.js's blinkText() clears #total-price then refills it
-    # BLINK_DELAY_MS (150ms) later -- even when the new value is the same
-    # as the old one, so waiting for "the text changed" isn't reliable.
-    # A short, deliberate pause past that delay is simpler and more
-    # robust than racing to catch the transient empty state.
-    time.sleep(0.5)
-    total_text = driver.find_element(By.ID, "total-price").text
-    return float(total_text)
+    return _wait_for_settled_price(driver)
 
 
 def buy_phone(driver) -> str:
@@ -203,15 +276,19 @@ def main() -> int:
                               f"'remote' = {REMOTE_BASE_URL} (default).")
     parser.add_argument("--base-url", default=None,
                          help="Explicit base URL, overrides --target.")
-    parser.add_argument("--student-name", default=DEFAULT_STUDENT_NAME,
-                         help=f"Local part of the student email to use (default: {DEFAULT_STUDENT_NAME}). "
-                              "The full email typed into the form is <student-name>@example.com.")
+    parser.add_argument("--student-name", required=True,
+                         help="Local part of the student email to use, e.g. --student-name alice01. "
+                              "Required (not defaulted) -- this test buys two real phones and always "
+                              "resets that student's data afterward, so each run needs to be "
+                              "unambiguously attributable to one student.")
     args = parser.parse_args()
     base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
     email = f"{args.student_name}@example.com"
 
     all_passed = True
     want_price = expected_price(CONFIG)
+
+    print(f"Target: {base_url}")
 
     options = webdriver.ChromeOptions()
     if args.headless:
@@ -223,7 +300,6 @@ def main() -> int:
     options.add_experimental_option("excludeSwitches", ["enable-logging"])
     driver = webdriver.Chrome(options=options)
     try:
-        print(f"Target: {base_url}")
         driver.get(base_url)
         # The dropdown <option>s are populated asynchronously (student.js
         # fetches /api/product-options and /api/ui-config on load) -- wait
@@ -280,6 +356,13 @@ def main() -> int:
         print("\n" + ("ALL CHECKS PASSED" if all_passed else "SOME CHECKS FAILED"))
         return 0 if all_passed else 1
     finally:
+        # Always reset this student's own data -- not a reset-ALL, just
+        # the same per-student cleanup the "Reset my data" button
+        # performs -- so the next run starts from a clean slate. Never
+        # touches action_log (see module docstring).
+        reset_ok = reset_student_data(driver, email)
+        print(f"\n{'Reset' if reset_ok else '[WARN] Could not reset'} {email}'s data"
+              f"{' (clean slate for next run).' if reset_ok else '.'}")
         driver.quit()
 
 

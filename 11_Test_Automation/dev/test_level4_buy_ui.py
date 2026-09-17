@@ -29,11 +29,13 @@ API (see its "Return: oldest-match rule" check).
 ENVIRONMENT
 -----------
 This flow needs Level 4 (for discount codes *and* Return/Store credit)
-and studentResetEnabled (for the final cleanup step). Teacher
-credentials let the script set both itself and restore whatever they
-were before it ran -- same pattern as verify_deployment.py. Supply them
-via TEACHER_USERNAME/TEACHER_PASSWORD env vars, --username/--password,
-or let the script prompt (getpass -- nothing echoed or persisted).
+and studentResetEnabled (for the final cleanup step) ALREADY configured
+on the target -- this script does not read or change teacher settings
+itself. That's deliberate: settings are global to the whole
+deployment, so if many students each ran their own script instance in
+parallel and every instance also set/restored settings, they'd race
+and stomp on each other. Have the teacher configure Level 4 +
+studentResetEnabled once for the class before anyone runs this.
 
 --student-name is REQUIRED here, unlike test_level1_buy.py/
 test_level1_buy_ui.py's optional default -- this test buys and returns
@@ -46,16 +48,13 @@ USAGE
     python test_level4_buy_ui.py --student-name alice01 --target local
     python test_level4_buy_ui.py --student-name alice01 --target remote
 
-Requires: pip install selenium requests
+Requires: pip install selenium
 """
 
 import argparse
-import getpass
-import os
 import sys
 import time
 
-import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -96,31 +95,6 @@ def check(label: str, condition: bool, detail: str = "") -> bool:
 def pause(interactive: bool, description: str) -> None:
     if interactive:
         input(f"\n[PAUSE] {description} Press ENTER to continue...")
-
-
-# ---------------------------------------------------------------------
-# Teacher settings setup/teardown (plain HTTP, not driven through the
-# browser -- same approach verify_deployment.py uses for this).
-# ---------------------------------------------------------------------
-
-def teacher_login(base_url: str, username: str, password: str) -> requests.Session:
-    session = requests.Session()
-    resp = session.post(f"{base_url}/api/teacher/login", json={"username": username, "password": password})
-    if resp.status_code != 200:
-        raise SystemExit(f"Teacher login failed (HTTP {resp.status_code}): {resp.json().get('error')}")
-    return session
-
-
-def get_settings(session: requests.Session, base_url: str) -> dict:
-    resp = session.get(f"{base_url}/api/teacher/settings")
-    resp.raise_for_status()
-    return resp.json()
-
-
-def put_settings(session: requests.Session, base_url: str, overrides: dict) -> dict:
-    resp = session.put(f"{base_url}/api/teacher/settings", json=overrides)
-    resp.raise_for_status()
-    return resp.json()
 
 
 # ---------------------------------------------------------------------
@@ -269,8 +243,6 @@ def main() -> int:
     parser.add_argument("--headless", action=argparse.BooleanOptionalAction, default=True,
                          help="Run Chrome headless (default), or visibly with --no-headless "
                               "(also enables interactive pause-and-inspect prompts).")
-    parser.add_argument("--username", default=os.environ.get("TEACHER_USERNAME"))
-    parser.add_argument("--password", default=os.environ.get("TEACHER_PASSWORD"))
     args = parser.parse_args()
 
     base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
@@ -278,20 +250,8 @@ def main() -> int:
     interactive = not args.headless
     all_passed = True
 
-    username = args.username or input("Teacher username: ")
-    password = args.password or getpass.getpass("Teacher password: ")
-
     print(f"Target: {base_url}")
     print(f"Student: {email}")
-
-    session = teacher_login(base_url, username, password)
-    original_settings = get_settings(session, base_url)
-    put_settings(session, base_url, {
-        "level": 4,
-        "studentResetEnabled": True,
-        "bugs": {"discountCodeMode": "normal", "allowDiscountCodeReuse": False, "creditBasis": "paid"},
-    })
-    print("Teacher settings: level=4, studentResetEnabled=true (will restore originals on exit).")
 
     options = webdriver.ChromeOptions()
     if args.headless:
@@ -365,8 +325,6 @@ def main() -> int:
         return 0 if all_passed else 1
     finally:
         driver.quit()
-        put_settings(session, base_url, original_settings)
-        print("Teacher settings restored to their original values.")
 
 
 if __name__ == "__main__":
