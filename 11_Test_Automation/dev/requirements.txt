@@ -1,0 +1,16 @@
+# Python dependencies for this project's scripts. Install with:
+#   pip install -r requirements.txt
+#
+# Versions are floors, not exact pins -- each is the version this project
+# was actually built and verified against.
+
+requests>=2.34.2          # test_level1_buy.py, load_test.py, verify_deployment.py
+selenium>=4.27.1          # test_level1_buy_ui.py (needs Chrome installed; Selenium
+                           # Manager downloads a matching chromedriver automatically)
+psycopg2-binary>=2.9.13   # triplet_coverage_monitor.py (direct Postgres connection)
+matplotlib>=3.11.0        # triplet_coverage_monitor.py (the live bar chart)
+
+# tkinter (triplet_coverage_monitor.py's GUI window) is part of the Python
+# standard library, not installable via pip -- it ships with the standard
+# python.org Windows/macOS installers. On Linux, install it via your
+# distro's package manager if it's missing (e.g. `apt install python3-tk`).

@@ -295,3 +295,8 @@ all, but no reason to leave it on.
 - `offline-server.js` — a plain-Node substitute for `vercel dev`, used
   only for fully offline local development (`vercel dev` itself can't run
   without network — see [Fully offline local development](#fully-offline-local-development)).
+- `test_level1_buy.py`, `test_level1_buy_ui.py`, `load_test.py`,
+  `verify_deployment.py`, `triplet_coverage_monitor.py` — the Python
+  scripts covered elsewhere in this README. `pip install -r requirements.txt`
+  installs everything all five need in one shot (each also documents its
+  own subset in its module docstring, if you only want one of them).
