@@ -4,12 +4,13 @@ keyword_runner.py -- Keyword-Driven Test Automation Framework for Phone Shop UI.
 Reads keyword commands from a text file and executes Selenium test actions.
 
 Usage:
-    python keyword_runner.py --student alice01 --tests-file test_cases.txt
+    python keyword_runner.py --email alice@post.jce.ac.il --tests-file test_cases.txt
     python keyword_runner.py -h
     python keyword_runner.py --help
 """
 
 import argparse
+import os
 import re
 import sys
 import time
@@ -44,6 +45,24 @@ SELECT_IDS = {
 
 REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
 LOCAL_BASE_URL = "http://localhost:3000"
+REQUIRED_EMAIL_DOMAIN = "@post.jce.ac.il"
+
+# ANSI escape codes for PASS/FAIL coloring. Everything else keeps
+# printing in the terminal's default color (no code = no change).
+if sys.platform == "win32":
+    # Windows' own console (unlike Windows Terminal/git-bash/most others)
+    # doesn't interpret ANSI escapes until this is switched on -- this is
+    # the well-known no-dependency way to do that (what colorama does
+    # internally), cheaper than adding a new pip dependency for it.
+    os.system("")
+COLOR_RED = "\033[31m"
+COLOR_GREEN = "\033[32m"
+COLOR_RESET = "\033[0m"
+
+
+def colorize(text: str, passed: bool) -> str:
+    return f"{COLOR_GREEN if passed else COLOR_RED}{text}{COLOR_RESET}"
+
 
 # Same shape execute_keyword() parses steps with -- reused so a
 # keyword-shaped line found outside any # test/# end test block (where
@@ -191,7 +210,7 @@ def kw_check_price(value_str: str) -> bool:
     target_val = float(clean_arg(value_str).replace("$", ""))
     match = abs(PRICE - target_val) < 0.01
     status = "PASS" if match else "FAIL"
-    print(f"    [{status}] checkPrice: expected {target_val:.2f}, got {PRICE:.2f}")
+    print(colorize(f"    [{status}] checkPrice: expected {target_val:.2f}, got {PRICE:.2f}", match))
     return match
 
 
@@ -250,7 +269,7 @@ def kw_check_credit(value_str: str) -> bool:
     target_val = float(clean_arg(value_str).replace("$", ""))
     match = abs(CREDIT - target_val) < 0.01
     status = "PASS" if match else "FAIL"
-    print(f"    [{status}] checkCredit: expected {target_val:.2f}, got {CREDIT:.2f}")
+    print(colorize(f"    [{status}] checkCredit: expected {target_val:.2f}, got {CREDIT:.2f}", match))
     return match
 
 
@@ -339,8 +358,13 @@ def execute_keyword(driver, email: str, line: str) -> bool:
     """Parses a single keyword line and executes the corresponding action."""
     match = KEYWORD_LINE_RE.match(line.strip())
     if not match:
-        print(f"    [WARN] Could not parse keyword line: {line}")
-        return True
+        # Same "the script itself is broken" reasoning as an unrecognized
+        # keyword name below -- a line that isn't even shaped like
+        # name(args) is just as much a sign of a bad test script (e.g. a
+        # bare word with no parentheses at all) and deserves the same
+        # hard stop, not a warning that's easy to miss in scrollback.
+        print(f"    [FATAL] Could not parse line as a keyword call: '{line}'. Aborting test run.")
+        sys.exit(1)
 
     kw_name = match.group(1).strip()
     kw_name_lower = kw_name.lower()
@@ -424,7 +448,7 @@ def run_test_file(driver, email: str, filepath: str) -> None:
                         test_passed = False
 
                 status = "PASS" if test_passed else "FAIL"
-                print(f"---> {current_test_id} RESULT: {status}\n")
+                print(colorize(f"---> {current_test_id} RESULT: {status}", test_passed) + "\n")
                 tests_summary.append((current_test_id, status))
 
                 current_test_id = None
@@ -443,12 +467,15 @@ def run_test_file(driver, email: str, filepath: str) -> None:
                 # or end of file).
                 print(f"\n  Step (outside any test): {stripped}")
                 kw_reset(driver, email)
-            elif kw_match:
+            else:
                 # Reset() is the only keyword valid outside a test
-                # block -- anything else here is a script error, same
-                # as an unknown keyword inside a test block.
-                print(f"    [FATAL] Unknown keyword outside any test block: "
-                      f"'{kw_match.group(1)}'. Aborting test run.")
+                # block -- anything else here (whether it's shaped like
+                # name(args) or not, e.g. a bare word with no
+                # parentheses) is a script error, same as an unknown or
+                # unparseable line inside a test block.
+                name = kw_match.group(1) if kw_match else stripped
+                print(f"    [FATAL] Unrecognized content outside any test block: "
+                      f"'{name}'. Aborting test run.")
                 sys.exit(1)
 
     # Summary Report
@@ -457,7 +484,7 @@ def run_test_file(driver, email: str, filepath: str) -> None:
     print("=" * 50)
     all_passed = True
     for test_id, status in tests_summary:
-        print(f"  {test_id}: {status}")
+        print(colorize(f"  {test_id}: {status}", status == "PASS"))
         if status != "PASS":
             all_passed = False
     print("=" * 50)
@@ -476,7 +503,9 @@ def main():
     )
     parser.add_argument("-h", action="store_true", help="Show CLI command options and exit")
     parser.add_argument("--help", action="store_true", help="Show CLI command options PLUS keyword reference and exit")
-    parser.add_argument("--student", required=False, help="Student identifier (e.g. --student alice01)")
+    parser.add_argument("--email", required=False,
+                         help=f"Student's email address, must end with {REQUIRED_EMAIL_DOMAIN} "
+                              f"(e.g. --email alice{REQUIRED_EMAIL_DOMAIN})")
     parser.add_argument("--tests-file", "--tests_file", dest="tests_file", default="test_cases.txt", help="Path to text file containing test cases")
     parser.add_argument("--target", choices=["local", "remote"], default="remote")
     parser.add_argument("--base-url", default=None)
@@ -500,11 +529,13 @@ def main():
         sys.exit(0)
 
     # Enforce mandatory options when running tests
-    if not args.student:
-        parser.error("the following arguments are required: --student")
+    if not args.email:
+        parser.error("the following arguments are required: --email")
+    if not args.email.lower().endswith(REQUIRED_EMAIL_DOMAIN):
+        parser.error(f"--email must end with {REQUIRED_EMAIL_DOMAIN}, got: {args.email!r}")
 
     base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
-    email = f"{args.student}@example.com"
+    email = args.email
 
     if not check_level_4(base_url):
         sys.exit(1)

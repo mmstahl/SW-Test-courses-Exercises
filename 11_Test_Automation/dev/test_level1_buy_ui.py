@@ -39,17 +39,17 @@ recomputed, same as test_level1_buy.py -- Buy always talks to the real
 server regardless of which client drove it, so purchase integrity isn't
 what's being demonstrated here; the UI behavior wrapped around it is.
 
---student-name is REQUIRED (not defaulted): this script buys two real
-phones under that email, and always resets that student's own data at
-the end (via the UI's own "Reset my data" button) so repeated runs
-start from a clean slate, rather than stepping on other students' or
-other runs' purchase history. That reset needs studentResetEnabled
-turned on -- this script does NOT set that itself (or any other
-setting): settings are global to the whole deployment, so if every
-student's script instance also toggled them, many running in parallel
-would race and stomp on each other. Have the teacher turn
-studentResetEnabled on for the class once, ahead of time. This never
-touches action_log: reset only deletes from
+--email is REQUIRED (not defaulted) and must end with @post.jce.ac.il:
+this script buys two real phones under that email, and always resets
+that student's own data at the end (via the UI's own "Reset my data"
+button) so repeated runs start from a clean slate, rather than
+stepping on other students' or other runs' purchase history. That
+reset needs studentResetEnabled turned on -- this script does NOT set
+that itself (or any other setting): settings are global to the whole
+deployment, so if every student's script instance also toggled them,
+many running in parallel would race and stomp on each other. Have the
+teacher turn studentResetEnabled on for the class once, ahead of time.
+This never touches action_log: reset only deletes from
 purchases/discount_codes/store_credit, and the Reset action itself
 adds a new action_log row rather than removing any.
 
@@ -70,6 +70,7 @@ from selenium.webdriver.support.ui import Select, WebDriverWait
 
 REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
 LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
+REQUIRED_EMAIL_DOMAIN = "@post.jce.ac.il"
 
 CONFIG = {
     "model": "Pixel 9",
@@ -276,14 +277,17 @@ def main() -> int:
                               f"'remote' = {REMOTE_BASE_URL} (default).")
     parser.add_argument("--base-url", default=None,
                          help="Explicit base URL, overrides --target.")
-    parser.add_argument("--student-name", required=True,
-                         help="Local part of the student email to use, e.g. --student-name alice01. "
-                              "Required (not defaulted) -- this test buys two real phones and always "
-                              "resets that student's data afterward, so each run needs to be "
-                              "unambiguously attributable to one student.")
+    parser.add_argument("--email", required=True,
+                         help=f"Student's email address, e.g. --email alice{REQUIRED_EMAIL_DOMAIN}. "
+                              f"Required (not defaulted) and must end with {REQUIRED_EMAIL_DOMAIN} -- "
+                              "this test buys two real phones and always resets that student's data "
+                              "afterward, so each run needs to be unambiguously attributable to one "
+                              "student.")
     args = parser.parse_args()
+    if not args.email.lower().endswith(REQUIRED_EMAIL_DOMAIN):
+        parser.error(f"--email must end with {REQUIRED_EMAIL_DOMAIN}, got: {args.email!r}")
     base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
-    email = f"{args.student_name}@example.com"
+    email = args.email
 
     all_passed = True
     want_price = expected_price(CONFIG)

@@ -37,16 +37,15 @@ parallel and every instance also set/restored settings, they'd race
 and stomp on each other. Have the teacher configure Level 4 +
 studentResetEnabled once for the class before anyone runs this.
 
---student-name is REQUIRED here, unlike test_level1_buy.py/
-test_level1_buy_ui.py's optional default -- this test buys and returns
-real purchases and touches store credit, so each run needs to be
-unambiguously attributable to one student and not collide with anyone
-else's on the shared database.
+--email is REQUIRED (not defaulted) and must end with @post.jce.ac.il:
+this test buys and returns real purchases and touches store credit, so
+each run needs to be unambiguously attributable to one student and not
+collide with anyone else's on the shared database.
 
 USAGE
 -----
-    python test_level4_buy_ui.py --student-name alice01 --target local
-    python test_level4_buy_ui.py --student-name alice01 --target remote
+    python test_level4_buy_ui.py --email alice@post.jce.ac.il --target local
+    python test_level4_buy_ui.py --email alice@post.jce.ac.il --target remote
 
 Requires: pip install selenium
 """
@@ -62,6 +61,7 @@ from selenium.webdriver.support.ui import Select, WebDriverWait
 
 REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
 LOCAL_BASE_URL = "http://localhost:3000"  # offline-server.js or vercel dev
+REQUIRED_EMAIL_DOMAIN = "@post.jce.ac.il"
 
 CONFIG = {
     "model": "Pixel 9",
@@ -233,9 +233,10 @@ def reset_student_data(driver, interactive: bool = False) -> bool:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--student-name", required=True,
-                         help="Local part of the student email to use, e.g. --student-name alice01. "
-                              "Required (not defaulted) -- this test touches real purchases/credit.")
+    parser.add_argument("--email", required=True,
+                         help=f"Student's email address, e.g. --email alice{REQUIRED_EMAIL_DOMAIN}. "
+                              f"Required (not defaulted) and must end with {REQUIRED_EMAIL_DOMAIN} -- "
+                              "this test touches real purchases/credit.")
     parser.add_argument("--target", choices=["local", "remote"], default="remote",
                          help=f"'local' = {LOCAL_BASE_URL} (offline-server.js or vercel dev), "
                               f"'remote' = {REMOTE_BASE_URL} (default).")
@@ -244,9 +245,11 @@ def main() -> int:
                          help="Run Chrome headless (default), or visibly with --no-headless "
                               "(also enables interactive pause-and-inspect prompts).")
     args = parser.parse_args()
+    if not args.email.lower().endswith(REQUIRED_EMAIL_DOMAIN):
+        parser.error(f"--email must end with {REQUIRED_EMAIL_DOMAIN}, got: {args.email!r}")
 
     base_url = args.base_url or (LOCAL_BASE_URL if args.target == "local" else REMOTE_BASE_URL)
-    email = f"{args.student_name}@example.com"
+    email = args.email
     interactive = not args.headless
     all_passed = True
 
