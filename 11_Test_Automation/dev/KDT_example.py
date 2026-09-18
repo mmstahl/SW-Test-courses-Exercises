@@ -45,7 +45,10 @@ SELECT_IDS = {
 REMOTE_BASE_URL = "https://sw-test-courses-exercises.vercel.app"
 LOCAL_BASE_URL = "http://localhost:3000"
 
-RESET_LINE_RE = re.compile(r"^Reset\s*\(\s*\)$", re.IGNORECASE)
+# Same shape execute_keyword() parses steps with -- reused so a
+# keyword-shaped line found outside any # test/# end test block (where
+# only Reset() is valid) gets the same case-insensitive name check.
+KEYWORD_LINE_RE = re.compile(r"^([a-zA-Z0-9_]+)\s*\((.*?)\)\s*$")
 
 KEYWORD_HELP_TEXT = """
 ======================================================================
@@ -334,42 +337,43 @@ def resolve_argument(arg_str: str) -> str:
 
 def execute_keyword(driver, email: str, line: str) -> bool:
     """Parses a single keyword line and executes the corresponding action."""
-    match = re.match(r"^\s*([a-zA-Z0-9_]+)\s*\((.*?)\)\s*$", line)
+    match = KEYWORD_LINE_RE.match(line.strip())
     if not match:
         print(f"    [WARN] Could not parse keyword line: {line}")
         return True
 
     kw_name = match.group(1).strip()
+    kw_name_lower = kw_name.lower()
     raw_args = match.group(2).strip()
-    
+
     args = [resolve_argument(a) for a in raw_args.split(",")] if raw_args else []
 
-    if kw_name == "phoneConfig":
+    if kw_name_lower == "phoneconfig":
         kw_phone_config(raw_args)
         return True
 
-    elif kw_name == "calculatePrice":
+    elif kw_name_lower == "calculateprice":
         code = args[0] if len(args) > 0 else ""
         kw_calculate_price(driver, email, code)
         return True
 
-    elif kw_name == "checkPrice":
+    elif kw_name_lower == "checkprice":
         return kw_check_price(args[0])
 
-    elif kw_name == "buy":
+    elif kw_name_lower == "buy":
         code = args[0] if len(args) > 0 else ""
         kw_buy(driver, email, code)
         return True
 
-    elif kw_name == "returnPhone":
+    elif kw_name_lower == "returnphone":
         mode = args[0] if len(args) > 0 else "store credit"
         kw_return_phone(driver, mode)
         return True
 
-    elif kw_name == "checkCredit":
+    elif kw_name_lower == "checkcredit":
         return kw_check_credit(args[0])
 
-    elif kw_name == "Reset":
+    elif kw_name_lower == "reset":
         # Same convention as the other action keywords above (buy,
         # returnPhone, ...): always returns True regardless of whether
         # the reset itself succeeded, so a failed reset doesn't flip
@@ -379,8 +383,13 @@ def execute_keyword(driver, email: str, line: str) -> bool:
         return True
 
     else:
-        print(f"    [WARN] Unknown keyword: {kw_name}")
-        return True
+        # An unknown keyword means the test script itself is broken
+        # (typo, or a keyword that doesn't exist) -- continuing past it
+        # would just run whatever steps happen to follow against
+        # whatever state the app was left in, which isn't meaningful.
+        # Abort the whole run rather than downgrade this to a warning.
+        print(f"    [FATAL] Unknown keyword: '{kw_name}'. Aborting test run.")
+        sys.exit(1)
 
 
 def run_test_file(driver, email: str, filepath: str) -> None:
@@ -424,13 +433,23 @@ def run_test_file(driver, email: str, filepath: str) -> None:
 
         if current_test_id:
             test_lines.append(stripped)
-        elif RESET_LINE_RE.match(stripped):
-            # Reset() written outside any # test/# end test block (e.g.
-            # between two tests, or at the end of the file) -- executes
-            # immediately, right here, then parsing continues on to
-            # whatever comes next (the next test, or end of file).
-            print(f"\n  Step (outside any test): {stripped}")
-            kw_reset(driver, email)
+        else:
+            kw_match = KEYWORD_LINE_RE.match(stripped)
+            if kw_match and kw_match.group(1).strip().lower() == "reset":
+                # Reset() written outside any # test/# end test block
+                # (e.g. between two tests, or at the end of the file) --
+                # executes immediately, right here, then parsing
+                # continues on to whatever comes next (the next test,
+                # or end of file).
+                print(f"\n  Step (outside any test): {stripped}")
+                kw_reset(driver, email)
+            elif kw_match:
+                # Reset() is the only keyword valid outside a test
+                # block -- anything else here is a script error, same
+                # as an unknown keyword inside a test block.
+                print(f"    [FATAL] Unknown keyword outside any test block: "
+                      f"'{kw_match.group(1)}'. Aborting test run.")
+                sys.exit(1)
 
     # Summary Report
     print("\n" + "=" * 50)
